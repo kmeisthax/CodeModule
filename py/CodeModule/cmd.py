@@ -1,4 +1,4 @@
-import argparse
+import argparse, sys
 from collections import namedtuple
 
 parser = argparse.ArgumentParser(prog="codemodule")
@@ -45,6 +45,6 @@ class command(object):
 def link(files, output, format):
     print ((files, output, format))
 
-def main(argv):
+def main(argv = sys.argv):
     parser.parse_args(argv)
 
