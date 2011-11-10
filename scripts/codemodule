@@ -1,0 +1,4 @@
+#!/usr/bin/python3
+from CodeModule import cmd
+
+cmd

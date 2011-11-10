@@ -21,13 +21,18 @@ overlap, this is an error and the linker quits.
    Additionally, fixated segments that export labels are also assigned concrete
 values for those exported labels.
 
- 2. Patching
+ 2. Symbol Resolution
+ 
+   Fixed memory locations are propagated into section symbols, and imported
+symbols are fixed to the value of the matching exported symbol.
+
+ 3. Patching
 
    Locations within the assembled sections which symbolically referred to
 labels in other sections are corrected to reflect the results of the fixation
 process.
 
- 3. Writeout
+ 4. Writeout
    Each memory area is now considered as a single unit. Bank segments
 within a particular memory area are merged; in such a way that each segment is
 the same size as the memory area it will be mapped into. Every memory area
@@ -43,12 +48,7 @@ list of all assembled locations."""
 
 import bisect, heapq
 from CodeModule.exc import FixationConflict
-
-#Memory area types
-PermenantArea = 0 # Memory area is subject to writeout, and present at program
-                  # startup
-DynamicArea   = 1 # Memory area is not written out, and must be iniialized by
-                  # program code
+from collections import namedtuple
 
 class Fixator(object):
     """A class for managing memory allocations on a fixed-size memory area separated into one or more segments.
@@ -64,21 +64,21 @@ class Fixator(object):
         size and are identified with a number called a SegID. SegIDs need not be
         continuously numbered."""
        #Here's how the bankbucket system works
-       #-1 contains all non bank-fixed sections
+       #None contains all non bank-fixed sections
        #+i contains all bank-fixed sections
        #the unfixed area is a priority queue of elements (size, sectionID).
        #the fixed area contains a list of allocations (begin, end, sectionID)
        #    and is sorted by base address. all allocations must not conflict,
-       #    except those in bucket -1, since those will be shuttled to
+       #    except those in bucket None, since those will be shuttled to
        #    different banks.
        #the freelist contains a list of free areas (begin, end) sorted by begin
-       #    address. it is not present in bucket -1 since -1 is not a real
+       #    address. it is not present in bucket None since it is not a real
        #    segment.
-        self.bankbuckets = {-1:{"unfixed":[], "fixed":[]}}
+        self.bankbuckets = {None:{"unfixed":[], "fixed":[]}}
         for i in segids:
             self.bankbuckets[i] = {"unfixed":[],
                 "fixed":[],
-                "freelist":[(0, segmentsize[i])]}
+                "freelist":[segmentsize[i]]}
         
        #Note: We allow strangely-sized segments to support exotic mappings, such
        #as the SFC's bank address mapping. Say if you had this mapping:
@@ -88,9 +88,6 @@ class Fixator(object):
        # segsize: [ 0x8000, ..., 0x8000, 0x10000, ...]
        # segids : [      0, ...,     3F,      40, ...]
        #(I have no idea what kind of ROM mapping this would involve,
-        self.sid = 0
-        
-        super(MemoryArea, self).__init__(*args, **kwargs)
     
     def malloc(self, bukkit, size):
         """Finds a free memory location and returns the address.
@@ -108,7 +105,7 @@ class Fixator(object):
         
         raise OutOfSegmentSpace
     
-    def fixSection(self, bukkit, alloc):
+    def fixSection(self, bankfix, alloc):
         """Commit a particular memory allocation to a bucket.
 
         Alloc is the object you got back from malloc. Optionally, you made alloc
@@ -117,6 +114,8 @@ class Fixator(object):
         Bukkit is the bucket to insert the allocation into.
         
         Throws exceptions if an allocation is impossible."""
+        bukkit = self.bankbuckets[bankfix]
+        
         #verify the allocation
         allocidx = bisect.bisect(bukkit["fixed"], (alloc[0], -1))
         if allocidx > 0:
@@ -148,45 +147,52 @@ class Fixator(object):
         if alloc[1] < oldrange[1]:
             bukkit["freelist"].insert(freeidx, (alloc[1], oldrange[1]))
         
+        #Commit allocation to linker segment descriptor
+        alloc[2].bank = bankfix
+        alloc[2].org = alloc[0]
         return alloc
     
-    def addSection(self, size, orgfix = None, bankfix = None, **kwargs):
+    def addSection(self, section, **kwargs):
         """Add a section to the allocation.
         
         This function returns the ID of the section, which you should use when
         consulting the allocations list from fixate."""
-        sid = self.sid
+        size = len(section.data)
+        orgfix = section.org
+        bankfix = section.bank
         
         if bankfix is not None and orgfix is not None:
             #Already-fixated section
-            self.fixSection(self.bankbuckets[bankfix], (orgfix, orgfix + size, sid))
+            self.fixSection(bankfix, (orgfix, orgfix + size, section))
         else if orgfix is not None:
-            self.bankbuckets[bankfix]["fixed"].append((orgfix, orgfix + size, sid))
+            #orgfixed only sections
+            self.bankbuckets[bankfix]["fixed"].append((orgfix, orgfix + size, section))
         else:
-            heapq.heappush(self.bankbuckets[bankfix]["unfixed"], (size, sid))
+            #bankfixed only or unfixed sections
+            heapq.heappush(self.bankbuckets[bankfix]["unfixed"], (size, section))
         
         self.sid += 1
         return sid
     
-    def fixBank(self, bukkit):
+    def fixBank(self, bukkitID):
         """For any section in a particular segment, fixate all it's unfixed sections."""
         while True:
             try:
+                bukkit = self.bankbuckets[bukkitID]
                 sec = heapq.heappop(bukkit["unfixed"])
                 alloc = self.malloc(sec[0])
-                self.fixSection(bukkit, (alloc[0], alloc[1], sid))
+                self.fixSection(bukkitID, (alloc[0], alloc[1], sec[1]))
             except IndexError:
                 break
     
     def fixIntoOrg(self, fixRange):
         """Given a particular memory location, try to fixate it in any possible bank."""
         for bukkitID in self.bankbuckets.keys():
-            if bukkitID is -1:
+            if bukkitID is None:
                 continue
             
-            bukkit = self.bankbuckets[bukkitID]
             try:
-                return self.fixSection(bukkit, fixRange)
+                return self.fixSection(bukkitID, fixRange)
             except FixationConflict:
                 continue
         
@@ -195,13 +201,13 @@ class Fixator(object):
     def fixSomewhere(self, section):
         """Fix a section. Just put it somewhere!"""
         for bukkitID in self.bankbuckets.keys():
-            if bukkitID is -1:
+            if bukkitID is None:
                 continue
             
             bukkit = self.bankbuckets[bukkitID]
             try:
                 alloc = self.malloc(bukkit, section[0])
-                return self.fixSection(bukkit, (alloc[0], alloc[1], section[0]))
+                return self.fixSection(bukkitID, (alloc[0], alloc[1], section[1]))
             except OutOfSegmentSpace:
                 pass
             except FixationConflict
@@ -211,10 +217,10 @@ class Fixator(object):
     
     def fixBanks(self):
         for bukkitID in self.bankbuckets.keys():
-            if bukkitID is -1:
+            if bukkitID is None:
                 continue
             
-            self.fixBank(self.bankbuckets[bukkitID])
+            self.fixBank(bukkitID)
     
     def fixOrgs(self):
         while len(self.bankbuckets[-1]["fixed"]) > 0:
@@ -241,7 +247,7 @@ class Fixator(object):
         
         then, Banks-first order:
         
-        if fixorder is FixBanksFirst:
+        if fixorder is FixBanksFirst: #occupy wall st
             Bankfixed, non-orgfixed sections
             Orgfixed, non-bankfixed sections
             Completely nonfixed sections
@@ -264,17 +270,121 @@ class Fixator(object):
         
         self.fixUnfixed()
 
+    def __len__(self):
+        
+
+Import = 0
+Export = 1
+
+class Resolver(object):
+    def __init__(self):
+        self.unresolvedList = {}
+        self.resolvedList = {}
+        self.qwikResolve = {} #used to resolve imports, only contains exports.
+    
+    ResolutionEntry = namedtuple("ResolutionEntry", ["fromFile", "toFiles", "value"])
+
+    def addSection(self, section, secSymbols):
+        resolved = {}
+        unresolved = {}
+
+        if section in self.unresolvedList.keys():
+            unresolved = self.unresolvedList[section]
+        else:
+            self.unresolvedList[section] = unresolved
+
+        if section in self.resolvedList.keys():
+            resolved = self.resolvedList[section]
+        else:
+            self.resolvedList[section] = resolved
+        
+        for symbol in secSymbols:
+            if symbol.type is Export:
+                buk = []
+                if symbol.name in self.qwikResolve.keys():
+                    buk = self.qwikResolve[symbol.name]
+                else:
+                    self.qwikResolve[symbol.name] = buk
+                
+                bukEntry = Resolver.ResolutionEntry(section.srcname, symbol.limits, symbol.addr)
+                resolved[symbol.name] = bukEntry
+                buk.append(bukEntry)
+            else:
+                bukEntry = Resolver.ResolutionEntry(section.srcname, symbol.limits, None)
+                unresolved[symbol.name] = bukEntry
+            
+        self.unresolvedList[section].update(unresolved)
+        self.resolvedList[section].update(resolved)
+
+    def resolve(self):
+        """Resolve all unresolved symbols, if possible."""
+        for (secName, secUnresolved) in self.unresolvedList:
+            for (symName, symbol) in secUnresolved:
+                resolved = False
+                for candidateSym in self.qwikResolve[symName]:
+                    if candidateSym.toFiles is None or symbol.fromFile in candidateSym.toFiles:
+                        symbol.value = candidateSym.value
+                        resolved = True
+                        break
+                
+                if not resolved:
+                    #it may be tempting to throw an exception here if a symbol
+                    #doesn't resolve, but that would be stupid. Example:
+                    #what if the client code wants to resolve each section piecemeal?
+                    continue
+                else:
+                    del secUnresolved[symName]
+                    self.resolvedList[secName].update([(symName, symbol)])
+
+    @property
+    def unresolved(self):
+        if len(self.unresolvedList.keys()) > 0:
+            return True
+        else:
+            return False
+
+    def lookup(self, sectionName, symbolName):
+        """Given a section's and a symbol's name, return the resolved symbol.
+
+        If the symbol has not yet been resolved or the section does not exist
+        then we will raise KeyError."""
+        return self.resolvedList[sectionName][symbolName]
+
+#these aren't really respected just yet
 MapIntoMemory = 0 #  GB style bank mapping
 #(Views exist in local memory to access external memory spaces)
 MapIntoBanks  = 1 #SNES style bank mapping
 #(Entire local memory a single view to a larger memory space)
 
-Import = 0
-Export = 1
+#Memory area types
+PermenantArea = 0 # Memory area is subject to writeout, and present at program
+                  # startup
+DynamicArea   = 1 # Memory area is not written out, and must be iniialized by
+                  # program code
+
+class SectionDescriptor(object):
+    def __init__(self, *args):
+        self.srcname = args[0]
+        self.name = args[1]
+        self.addr = args[2]
+        self.memarea = args[3]
+        self.data = args[4]
+        self.sourceobj = args[5]
+
+class SymbolDescriptor(object):
+    def __init__(self, *args):
+        self.name = args[0]
+        self.type = args[1]
+        self.limits = args[2]
+        self.addr = args[3]
+        self.section = args[4]
 
 class Linker(object):
+    MemGroup = namedtuple("MemGroup", ["fixator", "sections"])
+    
     def __init__(self):
         self.groups = {}
+        self.resolver = Resolver()
         
         for marea in self.MEMAREAS:
             spec = self.__getattribute__(marea)
@@ -282,29 +392,97 @@ class Linker(object):
             segCount = spec["maxsegs"]
             
             segids = []
-            segsize = []
+            segsize = {}
             for i in range(0, segCount):
                 segids.append(i)
-                segsize[i] = staticSize
+                baseAddr = 0
+                for view in spec["views"]:
+                    if type(view[1]) is int and view[1] is i:
+                        baseAddr = view[0]
+                        break
+                    elif i >= view[1][0] and i <= view[1][1]:
+                        baseAddr = view[0]
+                        break
+                
+                segsize[i] = (baseAddr, baseAddr+staticSize)
+
+            #Note: For right now, we only support banning whole banks
+            if "unusable" in spec.keys():
+                for ban in spec["unusable"]:
+                    segids.remove(ban[1])
+                    del segsize[ban[1]]
             
-            self.groups[marea] = {"fixator":Fixator(segsize, segids), "sections":[]}
-    
-    def setupMemoryArea(self, memarea):
-        segmentCodes = list(range(0, memarea["maxsegs"]))
-        for ban in memarea["unusable"]:
-            segmentCodes.remove(ban)
-        
-        fixer = Fixator(memarea["segsize"] * len(segmentCodes), segmentCodes)
+            self.groups[marea] = Linker.MemGroup(Fixator(segsize, segids), [])
     
     def addsection(self, section):
-        sid = self.groups[section["memarea"]]["fixator"].addSection(**section)
-        self.groups[section["memarea"]]["sections"].append(section)
-        return sid
+        sid = self.groups[section["memarea"]].fixator.addSection(section)
+        self.groups[section["memarea"]].sections.append(section)
     
     def fixate(self):
         """Fix all unfixed known sections into a single core."""
         for marea in self.MEMAREAS:
             info = getattr(self, marea)
             
-            for section in self.sections[marea]:
-                if section 
+            self.groups[marea].fixator.fixate()
+
+            for (section, sid) in self.groups[marea].sections:
+                section.bank = self.groups[marea].fixator.
+
+    def resolve(self):
+        """Resolve all symbols."""
+        for marea in self.MEMAREAS:
+            for section in self.groups[marea].sections:
+                symbols = self.extractSymbols(section)
+                self.resolver.addSection(section, symbols)
+
+    def patchup(self):
+        """Patch up all patch points."""
+        for marea in self.MEMAREAS:
+            for section in self.groups[marea].sections:
+                self.evalPatches(section)
+
+    def writeout(self, target):
+        """Expose data to writeout target."""
+        target.beginWrite(self)
+        for marea in self.MEMAREAS:
+            spec = getattr(self, marea)
+            target.enterStream(marea, spec)
+            for section in self.groups[marea].sections:
+                target.writeSection(section)
+            target.exitStream(marea, spec)
+        target.endWrite(self)
+
+class Writeout(object):
+    def __init__(self, streams):
+        """Create a basic writeout object.
+
+        streams - A dictionary mapping between memory areas and file objects.
+        If a stream does not exist then it will not be written to."""
+        self.streams = streams
+    
+    def beginWrite(self, linkerobj):
+        self.linkerobj = linkerobj
+    
+    def enterStream(self, streamName, streamSpec):
+        try:
+            self.curFile = self.streams[streamName]
+            self.interested = true
+        except KeyError:
+            self.interested = false
+        
+        self.streamName = streamName
+        self.streamSpec = streamSpec
+    
+    def writeSection(self, sectionSpec):
+        if not self.interested:
+            return
+        
+        secAddr = sectionSpec.bank * self.streamSpec["segsize"] + sectionSpec.org
+        self.curFile.seek(secAddr, whence=SEEK_SET)
+        self.curFile.write(sectionSpec.data)
+
+    def exitStream(self, streamName, streamSpec):
+        pass
+    
+    def endWrite(self, linkerobj):
+        pass

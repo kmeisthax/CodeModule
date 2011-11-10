@@ -25,3 +25,6 @@ class FixationConflict(Exception):
 class OutOfSegmentSpace(Exception):
     """Exception raised when a section cannot be fixated because the enclosing segment is out of room, either due to genuine lack of space, or because of internal fragmentation from user orgfixed sections."""
     pass
+
+class InvalidPatch(Exception):
+    """Exception raised when an assembler fixup patch is malformed and does not make sense."""

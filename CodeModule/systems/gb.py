@@ -15,59 +15,73 @@ class FlatMapper(object):
 
 class MBC1Mapper(object):
     ROM = {"segsize":0x4000,
-           "views":[(0, 0), (0x4000, 1, 0x80)],
+           "views":[(0, 0), (0x4000, (1, 0x80))],
            "maxsegs":0x80,
-           "unusable":[0x20, 0x40, 0x60]}
+           "unusable":[(None, 0x20), (None, 0x40), (None, 0x60)],
+           "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
            "views"[(0xA000, 0x03)],
-           "maxsegs":4}
+           "maxsegs":4,
+           "type":linker.PermenantArea}
 
 class MBC2Mapper(object):
     ROM = {"segsize":0x4000,
-           "views":[(0, 0), (0x4000, 1, 0x10)],
+           "views":[(0, 0), (0x4000, (1, 0x10))],
            "maxsegs":0x10,
-           "unusable":[0x20, 0x40, 0x60]}
+           "unusable":[(None, 0x20), (None, 0x40), (None, 0x60)],
+           "type":linker.PermenantArea}
     SRAM = {"segsize":0x200,
            "views"[(0xA000, 0)],
-           "maxsegs":1}
+           "maxsegs":1,
+           "type":linker.PermenantArea}
 
 class MBC3Mapper(object):
     ROM = {"segsize":0x4000,
-           "views":[(0, 0), (0x4000, 1, 0x80)],
-           "maxsegs":0x80}
+           "views":[(0, 0), (0x4000, (1, 0x80))],
+           "maxsegs":0x80,
+           "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
            "views"[(0xA000, 0x03)],
-           "maxsegs":4}
+           "maxsegs":4,
+           "type":linker.PermenantArea}
 
 class MBC5Mapper(object):
     ROM = {"segsize":0x4000,
-           "views":[(0, 0), (0x4000, 1, 0x100)],
-           "maxsegs":0x100}
+           "views":[(0, 0), (0x4000, (1, 0x100))],
+           "maxsegs":0x100,
+           "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
            "views"[(0xA000, 0x03)],
-           "maxsegs":4}
+           "maxsegs":4,
+           "type":linker.PermenantArea}
 
 class BaseSystem(object):
     MEMAREAS = ["ROM", "VRAM", "SRAM", "WRAM", "HRAM"]
-    HRAM = {"type":"flat",
-            "segsize":127}
+    HRAM = {"views":[(0xFF80, 0)],
+            "segsize":127,
+            "maxsegs":1,
+            "type":linker.DynamicArea}
     GROUPMAP = {"CODE": "ROM", "DATA": "ROM", "BSS":"WRAM", "HOME":("ROM", 0), "VRAM":"VRAM", "HRAM":"HRAM"}
 
 class CGB(BaseSystem):
     WRAM = {"segsize":0x1000,
-            "views":[(0xC000, 0), (0xD000, 1, 0x8)],
-            "maxsegs":8}
+            "views":[(0xC000, 0), (0xD000, (1, 0x8))],
+            "maxsegs":8,
+            "type":linker.DynamicArea}
     VRAM = {"segsize":0x1000,
-            "views":[(0x8000, 0), (0x9000, 1, 0x8)],
-            "maxsegs":2}
+            "views":[(0x8000, 0), (0x9000, (1, 0x8))],
+            "maxsegs":2,
+            "type":linker.DynamicArea}
 
 class DMG(BaseSystem):
     WRAM = {"segsize":0x2000,
             "views":[(0xC000, 0)],
-            "maxsegs":1}
+            "maxsegs":1,
+            "type":linker.DynamicArea}
     VRAM = {"segsize":0x2000,
             "views":[(0x8000, 0)],
-            "maxsegs":1}
+            "maxsegs":1,
+            "type":linker.DynamicArea}
 
 VARIANTLIST = ({"DMG":DMG, "CGB":CGB}, {"Flat":FlatMapper, "MBC1":MBC1Mapper, "MBC2":MBC2Mapper, "MBC3":MBC3Mapper, "MBC5":MBC5Mapper})
 

@@ -234,14 +234,20 @@ SignedOnes = 2              # High bit on means absolute value is complement of 
 SignedMagnitude = 3         # High bit on means absolute value is all lower bits
 
 def Int(size, endianness = BigEndian, signedness = Unsigned):
-    """Integer parsing class factory."""
+    """Integer parsing class factory.
+
+    It's result can also be subclassed. If you are writing a variable-int subclass,
+    set size - 1 and override ALL parsing functions."""
     bytecount = math.floor(size / 8)
-    if size % 8 is not 0:
+    if size % 8 is not 0 and size is not -1:
         raise InvalidSchema #we only support byte-aligned ints for now
         
     decomp  = pow(2,size)
     bitmask = pow(2,size) - 1
     highbit = pow(2,size - 1)
+
+    if (size == -1): #support for var-int subclasses
+        bitmask = -1
 
     class IntInstance(CField):
         """Class which parses ints of arbitrary size, endianness, and sign format."""
@@ -393,18 +399,31 @@ BeS32 = Int(32, BigEndian, Signed)
 
 EntriesCount = 0 # Array size is in number of instances of the contained type
 BytesCount = 1   # Array size is in number of encoded bytes in the underlying datablob
+ParseToEOF = 2   # Array is continuously parsed until some bytes before EOF.
 
 def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
+    """Array class factory.
+
+    CModel arrays can have multiple count types:
+
+    EntriesCount - Parse a specific number of entries from sizeParam
+    BytesCount - Parse a specific number of bytes from sizeParam
+    ParseToEOF - Parse until sizeParam bytes left in the file
+
+    sizeParam can be an integer (for fixed-size arrays) or the name of another
+    previously-parsed integer parameter in the cmodel.Struct."""
     class ArrayInstance(CField, list):
         def __init__(self, *args, **kwargs):
             super(ArrayInstance, self).__init__(*args, **kwargs)
             self.__uniqid = 0
             
         def load(self, fileobj):
-            minime = super(ArrayInstance, self)
+            scount = sizeParam
+            if type(sizeParam) is not int:
+                scount = self.get_dynamic_argument(sizeParam)
             
             if countType is BytesCount:
-                endLoc = self.get_dynamic_argument(sizeParam) + fileobj.tell()
+                endLoc = scount + fileobj.tell()
                 
                 while fileobj.tell() < endLoc:
                     item = containedType()
@@ -416,16 +435,38 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
                     if oldLoc == fileobj.tell():
                         #Child types are REQUIRED to consume at least one byte
                         #in byte-counted array mode.
-                        raise CorruptedData
+                        raise InvalidSchema
                 
-                self.find_argument_field(sizeParam).tie_to_length(self, "bytes")
+                if type(sizeParam) is string:
+                    self.find_argument_field(sizeParam).tie_to_length(self, "bytes")
             elif countType is EntriesCount:
-                for i in range(0, self.get_dynamic_argument(sizeParam)):
+                for i in range(0, scount):
                     item = containedType()
                     self.append(item)
                     
                     item.load(fileobj)
-                self.find_argument_field(sizeParam).tie_to_length(self)
+                if type(sizeParam) is string:
+                    self.find_argument_field(sizeParam).tie_to_length(self)
+            elif countType is ParseToEOF:
+                #determine end position
+                curpos = fileobj.tell()
+                fileobj.seek(scount, whence=SEEK_END)
+                endpos = fileobj.tell()
+                fileobj.seek(curpos, whence=SEEK_SET)   
+                lastpos = fileobj.tell()
+
+                while curpos < endpos:
+                    lastpos = curpos
+                    item = containedType()
+                    self.append(item)
+                    
+                    item.load(fileobj)
+                    curpos = fileobj.tell()
+                    if lastpos == curpos:
+                        raise InvalidSchema #we MUST consume SOME bytes in this mode
+                
+                if curpos > endpos:
+                    raise CorruptedData #we overwrote some other data
 
         def save(self, fileobj):
             for thing in self:
@@ -483,8 +524,12 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
             return b"".join(childbytes)
         
         def parsebytes(self, obytes):
+            scount = sizeParam
+            if type(sizeParam) is not int:
+                scount = self.get_dynamic_argument(sizeParam)
+            
             if countType is EntriesCount:
-                items = self.get_dynamic_argument(sizeParam)
+                items = scount
                 for i in range(0,items):
                     if (len(obytes) == 0):
                         #We ran out of data before parsing was complete.
@@ -494,11 +539,12 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
                     self.append(childItem)
                     obytes = childItem.parsebytes(obytes)
                 
-                self.find_argument_field(sizeParam).tie_to_length(self)
+                if type(sizeParam) is string:
+                    self.find_argument_field(sizeParam).tie_to_length(self)
                 return obytes
             elif countType is BytesCount:
-                bytecount = self.get_dynamic_argument(sizeParam)
-                mybytes = obytes[0:bytecount]
+                bytecount = scount
+                mybytes = obytes[:bytecount]
                 while len(mybytes) > 0:
                     #Just keep parsing until we run out of bytes.
                     childItem = containedType()
@@ -514,8 +560,26 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
                         #we run out of memory.
                         raise InvalidSchema
                 
-                self.find_argument_field(sizeParam).tie_to_length(self, "bytes")
-                return obytes[bytecount:-1]
+                if type(sizeParam) is string:
+                    self.find_argument_field(sizeParam).tie_to_length(self, "bytes")
+                return obytes[bytecount:]
+            elif countType is ParseToEOF:
+                mybytes = b""
+                if scount is 0:
+                    mybytes = obytes
+                else
+                    mybytes = obytes[:-(scount)]
+
+                while len(mybytes) > 0:
+                    childItem = containedType()
+                    self.append(childItem)
+                    
+                    oldcount = len(mybytes)
+                    mybytes = childItem.parsebytes(mybytes)
+                    
+                    if oldcount == len(mybytes):
+                        raise InvalidSchema
+                return obytes[-(scount):]
         
         @property
         def core(self):
@@ -629,6 +693,64 @@ def If(variableName, condition, basetype, *args, **kwargs):
                 return super(IfInstance, self).parsebytes(obytes)
     
     return IfInstance
+
+class EmptyField(cmodel.Field):
+    """Base field class for all fields that do not actually parse bytes from the structure."""
+    def load(self, fileobj):
+        pass
+
+    @property
+    def bytes(self):
+        return b""
+
+    @bytes.setter
+    def bytes(self, obytes):
+        if len(obytes) > 0:
+            raise CorruptedData
+    
+    def parsebytes(self, obytes):
+        return obytes
+
+def BitRange(targetParam, fromBits, toBits):
+    """Define a range of bits shadowed from another field.
+
+    The BitRange itself takes up no space, it just reparses existing, already parsed data."""
+    lomask = pow(2, fromBits) - 1
+    bitmask = pow(2, toBits) - 1 - lomask
+    clearmask = -1 - bitmask
+    if toBits is -1:
+        bitmask = -1 - lomask
+        clearmask = lomask
+    
+    #TODO: Make bitrange lock it's targetParam integer
+    class BitRangeInstance(EmptyField):
+        @property
+        def core(self):
+            basebits = self.get_dynamic_argument(targetParam)
+            ourbits = (basebits & bitmask) >> fromBits
+            return ourbits
+        
+        @core.setter
+        def core(self, newbits):
+            basebits = self.get_dynamic_argument(targetParam)
+            ourbits = ((newbits << toBits) & bitmask) | (basebits & clearmask)
+            self.set_dynamic_argument(targetParam, ourbits)
+
+    return BitRangeInstance
+
+def Bias(targetParam, biasFactor):
+    """Define a field based on another field that returns the first field's value, incremented by a bias value."""
+    class BiasInstance(EmptyField):
+        @property
+        def core(self):
+            basebits = self.get_dynamic_argument(targetParam)
+            ourbits = basebits + biasFactor
+            return ourbits
+        
+        @core.setter
+        def core(self, newbits):
+            ourbits = newbits - biasFactor
+            self.set_dynamic_argument(targetParam, ourbits)
 
 def Enum(storageType, *valueslist, **kwargs):
     """Class factory for the Enum field type.
