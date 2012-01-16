@@ -567,7 +567,7 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
                 mybytes = b""
                 if scount is 0:
                     mybytes = obytes
-                else
+                else:
                     mybytes = obytes[:-(scount)]
 
                 while len(mybytes) > 0:

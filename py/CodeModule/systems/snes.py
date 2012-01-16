@@ -11,14 +11,13 @@ class LoROM(object):
     
     (Seriously, why is it called Low if it's in the high half of memory?"""
     ROM = {"segsize": 0x8000,
-           "views": (0x8000, None),
+           "views": [(0x8000, None)],
            "maxsegs": 0x100}
 
 class HiROM(object):
-    ROM = {
+    pass
 
 class SHVC(object):
     MEMMODE = linker.MapIntoBanks
     WRAM = {"segsize": 0x10000,
-            "views": (0, 0, 1, 0x1FFF), (0, 0x7E, 0x80)}
-            "type": 
+            "views": [(0, 0, 1, 0x1FFF), (0, 0x7E, 0x80)]}

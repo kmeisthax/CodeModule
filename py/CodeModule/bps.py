@@ -109,5 +109,5 @@ def applyPatch(src, patch, tgt):
     bps.load(patch)
 
     tgtBytesCnt = 0
-    
-    for command in 
+#UNFINISHED CODE   
+#    for command in 

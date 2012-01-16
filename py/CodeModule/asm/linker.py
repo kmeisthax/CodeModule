@@ -47,7 +47,7 @@ plugin with a stream for each fully linked permenant memory area as well as a
 list of all assembled locations."""
 
 import bisect, heapq
-from CodeModule.exc import FixationConflict
+from CodeModule.exc import FixationConflict, OutOfSegmentSpace
 from collections import namedtuple
 
 class Fixator(object):
@@ -164,7 +164,7 @@ class Fixator(object):
         if bankfix is not None and orgfix is not None:
             #Already-fixated section
             self.fixSection(bankfix, (orgfix, orgfix + size, section))
-        else if orgfix is not None:
+        elif orgfix is not None:
             #orgfixed only sections
             self.bankbuckets[bankfix]["fixed"].append((orgfix, orgfix + size, section))
         else:
@@ -210,7 +210,7 @@ class Fixator(object):
                 return self.fixSection(bukkitID, (alloc[0], alloc[1], section[1]))
             except OutOfSegmentSpace:
                 pass
-            except FixationConflict
+            except FixationConflict:
                 pass
         
         raise OutOfSegmentSpace
@@ -269,9 +269,6 @@ class Fixator(object):
             self.fixBanks()
         
         self.fixUnfixed()
-
-    def __len__(self):
-        
 
 Import = 0
 Export = 1
@@ -424,10 +421,7 @@ class Linker(object):
             info = getattr(self, marea)
             
             self.groups[marea].fixator.fixate()
-
-            for (section, sid) in self.groups[marea].sections:
-                section.bank = self.groups[marea].fixator.
-
+    
     def resolve(self):
         """Resolve all symbols."""
         for marea in self.MEMAREAS:

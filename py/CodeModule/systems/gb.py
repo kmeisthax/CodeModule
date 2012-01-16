@@ -9,7 +9,7 @@ class FlatMapper(object):
            "maxsegs":1,
            "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
-           "views"[(0xA000, 0x4)],
+           "views":[(0xA000, 0x4)],
            "maxsegs":1,
            "type":linker.PermenantArea}
 
@@ -20,7 +20,7 @@ class MBC1Mapper(object):
            "unusable":[(None, 0x20), (None, 0x40), (None, 0x60)],
            "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
-           "views"[(0xA000, 0x03)],
+           "views":[(0xA000, 0x03)],
            "maxsegs":4,
            "type":linker.PermenantArea}
 
@@ -31,7 +31,7 @@ class MBC2Mapper(object):
            "unusable":[(None, 0x20), (None, 0x40), (None, 0x60)],
            "type":linker.PermenantArea}
     SRAM = {"segsize":0x200,
-           "views"[(0xA000, 0)],
+           "views":[(0xA000, 0)],
            "maxsegs":1,
            "type":linker.PermenantArea}
 
@@ -41,7 +41,7 @@ class MBC3Mapper(object):
            "maxsegs":0x80,
            "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
-           "views"[(0xA000, 0x03)],
+           "views":[(0xA000, 0x03)],
            "maxsegs":4,
            "type":linker.PermenantArea}
 
@@ -51,7 +51,7 @@ class MBC5Mapper(object):
            "maxsegs":0x100,
            "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
-           "views"[(0xA000, 0x03)],
+           "views":[(0xA000, 0x03)],
            "maxsegs":4,
            "type":linker.PermenantArea}
 
@@ -124,6 +124,8 @@ def banked2flat(bank, addr, mbcver = 3):
 
 Z80INT = struct.Struct("<H")
 Z80CHAR = struct.Struct("<B")
+
+#this is all dead code :/
 
 class ROMImage(object):
     class ROMBank (object):

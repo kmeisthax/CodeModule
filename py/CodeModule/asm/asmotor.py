@@ -79,7 +79,7 @@ def asm2rad(asmDegs):
 class ASMotorLinker(linker.Linker):
     """Linker mixin for ASMotor object file support."""
     def loadTranslationUnit(self, filename):
-        """Load the translation music and attempt to add the data inside to the """
+        """Load the translation music and attempt to add the data inside to the linker"""
         with open(filename, "rb") as fileobj:
             objobj = XObj()
             objobj.load(fileobj)
@@ -220,12 +220,12 @@ class ASMotorLinker(linker.Linker):
             else:
                 return 0
         
-        OBJ_OP_LOGICGE  = __argfunc(2)(lambda x,y: int(x >= y)
-        OBJ_OP_LOGICGT  = __argfunc(2)(lambda x,y: int(x > y)
-        OBJ_OP_LOGICLE  = __argfunc(2)(lambda x,y: int(x <= y)
-        OBJ_OP_LOGICLT  = __argfunc(2)(lambda x,y: int(x < y)
-        OBJ_OP_LOGICEQU = __argfunc(2)(lambda x,y: int(x == y)
-        OBJ_OP_LOGICNE  = __argfunc(2)(lambda x,y: int(x != y)
+        OBJ_OP_LOGICGE  = __argfunc(2)(lambda x,y: int(x >= y))
+        OBJ_OP_LOGICGT  = __argfunc(2)(lambda x,y: int(x > y))
+        OBJ_OP_LOGICLE  = __argfunc(2)(lambda x,y: int(x <= y))
+        OBJ_OP_LOGICLT  = __argfunc(2)(lambda x,y: int(x < y))
+        OBJ_OP_LOGICEQU = __argfunc(2)(lambda x,y: int(x == y))
+        OBJ_OP_LOGICNE  = __argfunc(2)(lambda x,y: int(x != y))
         
         @__argfunc(2)
         def OBJ_FUNC_LOWLIMIT(x, y):
