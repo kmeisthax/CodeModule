@@ -23,5 +23,17 @@ def link(logger, infiles, infmt, outfiles, baserom, platform, **kwargs):
     lnkcls = type("lnk", {}, lookup_system_bases(bases))
     lnk = lnkcls()
     
+    logger.info("Loading %(lenfname)d files..." % {"lenfname":len(infiles)})
     for fname in infiles:
-        
+        lnk.loadTranslationUnit(fname)
+    
+    logger.info("Fixating (assigning concrete values to) sections...")
+    lnk.fixate()
+    
+    logger.info("Resolving symbols...")
+    lnk.resolve()
+    
+    logger.info("Patching data values to match linker decisions...")
+    lnk.patchup()
+    
+    logger.info("Writing your data out to disk.")
