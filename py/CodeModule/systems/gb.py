@@ -1,19 +1,31 @@
 from CodeModule.exc import *
-from CodeModule.assembler import linker
+from CodeModule.asm import linker
+from CodeModule.systems import BasePlatform
 
 import math, os, struct
 
-class FlatMapper(object):
+class FlatMapper(BasePlatform):
     ROM = {"segsize":0x8000,
            "views":[(0, 0)],
            "maxsegs":1,
            "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
-           "views":[(0xA000, 0x4)],
+           "views":[(0xA000, 0)],
            "maxsegs":1,
            "type":linker.PermenantArea}
+    
+    def banked2flat(bank, addr):
+        """Convert a Gameboy bank number and Z80 address to a flat ROM address and stream name."""
+        
+        if addr < 0x8000:
+            return (addr, "ROM")
+        elif addr > 0x9FFF and addr < 0xC000:
+            return ((addr - 0x9FFF), "SRAM")
+        else:
+            return super(FlatMapper, self).banked2flat(bank, addr)
+            
 
-class MBC1Mapper(object):
+class MBC1Mapper(BasePlatform):
     ROM = {"segsize":0x4000,
            "views":[(0, 0), (0x4000, (1, 0x80))],
            "maxsegs":0x80,
@@ -23,8 +35,28 @@ class MBC1Mapper(object):
            "views":[(0xA000, 0x03)],
            "maxsegs":4,
            "type":linker.PermenantArea}
+    
+    def banked2flat(bank, addr):
+        """Convert a Gameboy bank number and Z80 address to a flat ROM address."""
+        
+        if addr < 0x8000 and bank < 0x80:
+            if bank == 0x20 or bank == 0x40 or bank == 0x60 or bank == 0:
+                bank += 1
 
-class MBC2Mapper(object):
+            if addr < 0x4000:
+                bank = 0
+            else:
+                addr -= 0x4000
+
+            return (bank * 0x4000 + addr, "ROM")
+        elif addr > 0x9FFF and addr < 0xC000 and bank < 0x04:
+            addr -= 0xA000
+            
+            return (bank * 0x1000 + addr, "SRAM")
+        else:
+            return super(MBC1Mapper, self).banked2flat(bank, addr)
+
+class MBC2Mapper(BasePlatform):
     ROM = {"segsize":0x4000,
            "views":[(0, 0), (0x4000, (1, 0x10))],
            "maxsegs":0x10,
@@ -34,8 +66,25 @@ class MBC2Mapper(object):
            "views":[(0xA000, 0)],
            "maxsegs":1,
            "type":linker.PermenantArea}
+    
+    def banked2flat(bank, addr):
+        """Convert a Gameboy bank number and Z80 address to a flat ROM address."""
+        
+        if addr < 0x8000 and bank < 0x10:
+            if addr < 0x4000:
+                bank = 0
+            else:
+                addr -= 0x4000
 
-class MBC3Mapper(object):
+            return (bank * 0x4000 + addr, "ROM")
+        elif addr > 0x9FFF and addr < 0xA200 and bank == 0:
+            addr -= 0xA000
+            
+            return (addr, "SRAM")
+        else:
+            return super(MBC2Mapper, self).banked2flat(bank, addr)
+
+class MBC3Mapper(BasePlatform):
     ROM = {"segsize":0x4000,
            "views":[(0, 0), (0x4000, (1, 0x80))],
            "maxsegs":0x80,
@@ -44,24 +93,94 @@ class MBC3Mapper(object):
            "views":[(0xA000, 0x03)],
            "maxsegs":4,
            "type":linker.PermenantArea}
+    
+    def banked2flat(bank, addr):
+        """Convert a Gameboy bank number and Z80 address to a flat ROM address."""
+        
+        if addr < 0x8000 and bank < 0x80:
+            if addr < 0x4000:
+                bank = 0
+            else:
+                addr -= 0x4000
 
-class MBC5Mapper(object):
+            return (bank * 0x4000 + addr, "ROM")
+        elif addr > 0x9FFF and addr < 0xC000 and bank < 0x04:
+            addr -= 0xA000
+            
+            return (bank * 0x1000 + addr, "SRAM")
+        else:
+            return super(MBC3Mapper, self).banked2flat(bank, addr)
+
+class MBC5Mapper(BasePlatform):
     ROM = {"segsize":0x4000,
-           "views":[(0, 0), (0x4000, (1, 0x100))],
-           "maxsegs":0x100,
+           "views":[(0, 0), (0x4000, (1, 0x200))],
+           "maxsegs":0x200,
            "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
-           "views":[(0xA000, 0x03)],
-           "maxsegs":4,
+           "views":[(0xA000, 0x10)],
+           "maxsegs":0x10,
            "type":linker.PermenantArea}
+    
+    def banked2flat(bank, addr):
+        """Convert a Gameboy bank number and Z80 address to a flat ROM address.
+        
+        This MBC5 implementation supports 64mbit cartridges, which were never
+        released by Nintendo but are mentioned in the GBPM. Some EMS flashcarts
+        are 64mbit, but allow you to boot to the first or second half of that
+        memory space through reset-counting hardware."""
+        
+        if addr < 0x8000 and bank < 0x200:
+            if addr < 0x4000:
+                bank = 0
+            else:
+                addr -= 0x4000
 
-class BaseSystem(object):
-    MEMAREAS = ["ROM", "VRAM", "SRAM", "WRAM", "HRAM"]
+            return (bank * 0x4000 + addr, "ROM")
+        elif addr > 0x9FFF and addr < 0xC000 and bank < 0x10:
+            addr -= 0xA000
+            
+            return (bank * 0x1000 + addr, "SRAM")
+        else:
+            return super(MBC5Mapper, self).banked2flat(bank, addr)
+
+class BaseSystem(BasePlatform):
+    MEMAREAS = ["ROM", "VRAM", "SRAM", "WRAM", "HRAM", "OAM", "ECHO", "IOSPACE", "INTMASK"]
+    IOSPACE = {"views":[(0xFF00, 0)],
+               "segsize":128,
+               "maxsegs":1,
+               "type":linker.DynamicArea}
+    INTMASK = {"views":[(0xFFFF, 0)],
+               "segsize":1,
+               "maxsegs":1,
+               "type":linker.DynamicArea}
     HRAM = {"views":[(0xFF80, 0)],
             "segsize":127,
             "maxsegs":1,
             "type":linker.DynamicArea}
+    OAM = {"views":[(0xFE00, 0)],
+           "segsize":0xA0,
+           "maxsegs":1,
+           "type":linker.DynamicArea}
+    ECHO = {"views":[(0xE000, 0)],
+            "segsize":
+            "type":linker.ShadowArea,
+            "shadows":"WRAM"}
     GROUPMAP = {"CODE": "ROM", "DATA": "ROM", "BSS":"WRAM", "HOME":("ROM", 0), "VRAM":"VRAM", "HRAM":"HRAM"}
+    
+    def banked2flat(bank, addr):
+        if addr > 0xFDFF and addr < 0xFEA0:
+            return (addr - 0xFE00, "OAM")
+        elif addr > 0xFEFF and addr < 0xFF80:
+            return (addr - 0xFF00, "IOSPACE")
+        elif addr > 0xFF7F and addr < 0xFFFF:
+            return (addr - 0xFF80, "HRAM")
+        elif addr > 0xDFFF and addr < 0xFE00:
+            newresp = self.banked2flat(addr - 0x2000)
+            return (newresp[0], "ECHO")
+        elif addr == 0xFFFF:
+            return (0, "INTMASK")
+        else:
+            return super(BaseSystem, self).banked2flat(bank, addr)
 
 class CGB(BaseSystem):
     WRAM = {"segsize":0x1000,
@@ -72,6 +191,21 @@ class CGB(BaseSystem):
             "views":[(0x8000, 0), (0x9000, (1, 0x8))],
             "maxsegs":2,
             "type":linker.DynamicArea}
+    
+    def banked2flat(bank, addr):
+        """Convert a Gameboy bank number and Z80 address to a flat ROM address."""
+        if addr > 0x7FFF and addr < 0xA000 and bank < 2:
+            return (bank * 0x2000 + addr - 0x8000, "VRAM")
+        elif addr > 0xBFFF and addr < 0xE000 and bank < 8:
+            if addr < 0xC000:
+                bank = 0
+            else:
+                addr -= 0x1000
+            
+            addr -= 0xC000
+            return (bank * 0x1000 + addr, "WRAM")
+        else:
+            return super(BaseSystem, self).banked2flat(bank, addr)
 
 class DMG(BaseSystem):
     WRAM = {"segsize":0x2000,
@@ -82,6 +216,15 @@ class DMG(BaseSystem):
             "views":[(0x8000, 0)],
             "maxsegs":1,
             "type":linker.DynamicArea}
+    
+    def banked2flat(bank, addr):
+        """Convert a Gameboy bank number and Z80 address to a flat ROM address."""
+        if addr > 0x7FFF and addr < 0xA000:
+            return (addr - 0x8000, "VRAM")
+        elif addr > 0xBFFF and addr < 0xE000:
+            return (addr - 0xC000, "WRAM")
+        else:
+            return super(BaseSystem, self).banked2flat(bank, addr)
 
 VARIANTLIST = ({"DMG":DMG, "CGB":CGB}, {"Flat":FlatMapper, "MBC1":MBC1Mapper, "MBC2":MBC2Mapper, "MBC3":MBC3Mapper, "MBC5":MBC5Mapper})
 
@@ -102,30 +245,10 @@ def flat2banked(flataddr):
 
     return (bank, addr)
 
-def banked2flat(bank, addr, mbcver = 3):
-    """Convert a Gameboy bank number and Z80 address to a flat ROM address."""
-    
-    if addr > 0x7FFF:
-        raise InvalidAddress
-    
-    if mbcver == 0: #Bare ROM, 32k max, no banks
-        return addr
-    
-    if mbcver < 3: #MBC1 and MBC2 cannot map banks 0x20, 0x40, 0x60, or HOME
-        if bank == 0x20 or bank == 0x40 or bank == 0x60 or bank == 0:
-            bank += 1
-
-    if addr < 0x4000:
-        bank = 0
-    else:
-        addr -= 0x4000
-
-    return bank * 0x4000 + addr
+#this is all dead code :/
 
 Z80INT = struct.Struct("<H")
 Z80CHAR = struct.Struct("<B")
-
-#this is all dead code :/
 
 class ROMImage(object):
     class ROMBank (object):

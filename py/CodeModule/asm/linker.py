@@ -358,6 +358,7 @@ PermenantArea = 0 # Memory area is subject to writeout, and present at program
                   # startup
 DynamicArea   = 1 # Memory area is not written out, and must be iniialized by
                   # program code
+ShadowArea    = 2 # Memory area is the same as another area.
 
 class SectionDescriptor(object):
     def __init__(self, *args):
@@ -379,12 +380,13 @@ class SymbolDescriptor(object):
 class Linker(object):
     MemGroup = namedtuple("MemGroup", ["fixator", "sections"])
     
-    def __init__(self):
+    def __init__(self, platform):
         self.groups = {}
         self.resolver = Resolver()
+        self.platform = platform
         
-        for marea in self.MEMAREAS:
-            spec = self.__getattribute__(marea)
+        for marea in self.platform.MEMAREAS:
+            spec = self.platform.__getattribute__(marea)
             staticSize = spec["segsize"]
             segCount = spec["maxsegs"]
             
@@ -417,28 +419,28 @@ class Linker(object):
     
     def fixate(self):
         """Fix all unfixed known sections into a single core."""
-        for marea in self.MEMAREAS:
+        for marea in self.platform.MEMAREAS:
             info = getattr(self, marea)
             
             self.groups[marea].fixator.fixate()
     
     def resolve(self):
         """Resolve all symbols."""
-        for marea in self.MEMAREAS:
+        for marea in self.platform.MEMAREAS:
             for section in self.groups[marea].sections:
                 symbols = self.extractSymbols(section)
                 self.resolver.addSection(section, symbols)
 
     def patchup(self):
         """Patch up all patch points."""
-        for marea in self.MEMAREAS:
+        for marea in self.platform.MEMAREAS:
             for section in self.groups[marea].sections:
                 self.evalPatches(section)
 
     def writeout(self, target):
         """Expose data to writeout target."""
         target.beginWrite(self)
-        for marea in self.MEMAREAS:
+        for marea in self.platform.MEMAREAS:
             spec = getattr(self, marea)
             target.enterStream(marea, spec)
             for section in self.groups[marea].sections:
@@ -447,12 +449,15 @@ class Linker(object):
         target.endWrite(self)
 
 class Writeout(object):
-    def __init__(self, streams):
+    def __init__(self, streams, platform, *args, **kwargs):
         """Create a basic writeout object.
 
         streams - A dictionary mapping between memory areas and file objects.
         If a stream does not exist then it will not be written to."""
         self.streams = streams
+        self.platform = platform
+        
+        super(Writeout, self).__init__(streams, platform, *args, **kwargs)
     
     def beginWrite(self, linkerobj):
         self.linkerobj = linkerobj
@@ -471,10 +476,10 @@ class Writeout(object):
         if not self.interested:
             return
         
-        secAddr = sectionSpec.bank * self.streamSpec["segsize"] + sectionSpec.org
+        secAddr = self.platform.banked2flat(sectionSpec.bank, sectionSpec.org)
         self.curFile.seek(secAddr, whence=SEEK_SET)
         self.curFile.write(sectionSpec.data)
-
+    
     def exitStream(self, streamName, streamSpec):
         pass
     
