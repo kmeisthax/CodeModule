@@ -1,5 +1,5 @@
 from CodeModule.cmd import command, logged, argument, group
-from CodeModule.asm import asmotor, linker
+from CodeModule.asm import asmotor, linker, writeout
 from CodeModule.systems import lookup_system_bases
 
 @logged("linker")
@@ -11,6 +11,9 @@ from CodeModule.systems import lookup_system_bases
 @command
 def link(logger, infiles, infmt, outfiles, baserom, platform, **kwargs):
     """Link object code into a final format."""
+    print (logger, infiles, infmt, outfiles, baserom, platform)
+    return 
+    
     if infmt != 'asmotor':
         logger.critical("Only ASMotor format objects are currently supported.")
         return
@@ -20,8 +23,19 @@ def link(logger, infiles, infmt, outfiles, baserom, platform, **kwargs):
     bases = ["linker", fmt]
     bases.extend(platform)
     
-    lnkcls = type("lnk", {}, lookup_system_bases(bases))
-    lnk = lnkcls()
+    platcls = type("platcls", {}, lookup_system_bases(bases))
+    plat = platcls()
+    
+    lnk = asmotor.ASMotorLinker(plat)
+
+    #Create writeout object
+    wotgt = None
+    
+    if baserom is not None and baserom != "":
+        wotgt = writeout.OverlayWriteout(bases = {"ROM":baserom},
+            streams = {"ROM":outfiles}, platform = plat)
+    else:
+        wotgt = writeout.ROMWriteout(streams = {"ROM":outfiles}, platform = plat)
     
     logger.info("Loading %(lenfname)d files..." % {"lenfname":len(infiles)})
     for fname in infiles:
@@ -37,3 +51,6 @@ def link(logger, infiles, infmt, outfiles, baserom, platform, **kwargs):
     lnk.patchup()
     
     logger.info("Writing your data out to disk.")
+    lnk.writeout(wotgt)
+    
+    logger.info("Thank you for flying with CodeModule airlines.")
