@@ -1,18 +1,16 @@
 from CodeModule.cmd import command, logged, argument, group
 from CodeModule.asm import asmotor, linker, writeout
-from CodeModule.systems import lookup_system_bases
+from CodeModule.systems.helper import lookup_system_bases
 
-@logged("linker")
-@argument('files', nargs = '+', type=str, metavar='foo.o')
-@argument('-f', type=str, metavar="asmotor", default = "asmotor")
-@argument('-o', nargs=1, action="append", metavar='fubarmon.gb')
-@argument('--baserom', type=str, nargs=1, metavar='fubarmon-j.gb')
-@argument('-p', type=str, nargs=1, metavar='gb')
+@argument('infiles', nargs = '+', type=str, metavar='foo.o')
+@argument('-f', type=str, metavar="asmotor", default = "asmotor", dest = "infmt")
+@argument('-o', type=str, action="append", metavar='fubarmon.gb', dest = "outfiles")
+@argument('--baserom', type=str, nargs=1, metavar='fubarmon-j.gb', dest = "baserom")
+@argument('-p', type=str, action="append", metavar='gb', dest = "platform")
 @command
+@logged("linker")
 def link(logger, infiles, infmt, outfiles, baserom, platform, **kwargs):
     """Link object code into a final format."""
-    print (logger, infiles, infmt, outfiles, baserom, platform)
-    return 
     
     if infmt != 'asmotor':
         logger.critical("Only ASMotor format objects are currently supported.")

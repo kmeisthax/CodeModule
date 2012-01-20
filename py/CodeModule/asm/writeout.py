@@ -23,7 +23,7 @@ class ROMWriteout(object):
         self.linkerobj = linkerobj
     
     def enterStream(self, streamName, streamSpec):
-        if streamName in self.streams.keys()
+        if streamName in self.streams.keys():
             self.curFile = self.streams[streamName]
             self.interested = true
         else:

@@ -1,7 +1,6 @@
 """ASMotor support package
 
 This parses and links ASMotor object files."""
-from CodeModule.systems.gb import banked2flat
 from CodeModule.asm import linker
 from CodeModule.exc import InvalidPatch
 from CodeModule import cmodel
@@ -75,6 +74,32 @@ class XObj(cmodel.Struct):
 
 def asm2rad(asmDegs):
     return (asmDegs / (384 * 256)) % 1 * pi
+
+def _argfunc(numargs):
+    """Helper function that returns a decorator that wraps evaluation functions which take a certain number of arguments"""
+    def decorator(op):
+        """Decorator which wraps function op to look like a normal eval func.
+        
+        A normal eval func has the following signature:
+        
+            def evalOp(self, instr, stack) --> stack
+            
+        All operations cause side effects on the stack. On the contrary, the
+        following signature is much more natural:
+        
+            def add(x, y) --> sum
+            
+        This decorator takes a number of arguments off of the stack, calls
+        the wrapped function with them, and then places the result on the
+        stack. If the result is not an integer than we will assume it is an
+        iterable and copy all of it's elements onto the stack."""
+        def decorated (self, instr):
+            args = reversed(self.__stack[-numargs:])
+            ret = op(*args)
+            self.__stack.extend(reversed(ret))
+        
+        return decorated
+    return decorator
 
 class ASMotorLinker(linker.Linker):
     """Linker mixin for ASMotor object file support."""
@@ -151,32 +176,6 @@ class ASMotorLinker(linker.Linker):
         
         return symList
     
-    def __argfunc(self, numargs):
-        """Helper function that returns a decorator that wraps evaluation functions which take a certain number of arguments"""
-        def decorator(op):
-            """Decorator which wraps function op to look like a normal eval func.
-            
-            A normal eval func has the following signature:
-            
-                def evalOp(self, instr, stack) --> stack
-                
-            All operations cause side effects on the stack. On the contrary, the
-            following signature is much more natural:
-            
-                def add(x, y) --> sum
-                
-            This decorator takes a number of arguments off of the stack, calls
-            the wrapped function with them, and then places the result on the
-            stack. If the result is not an integer than we will assume it is an
-            iterable and copy all of it's elements onto the stack."""
-            def decorated (self, instr):
-                args = reversed(self.__stack[-numargs:])
-                ret = op(*args)
-                self.__stack.extend(reversed(ret))
-            
-            return decorated
-        return decorator
-    
     class FixInterpreter(object):
         def __init__(self, symLookup):
             self.__symLookup = symLookup
@@ -190,56 +189,56 @@ class ASMotorLinker(linker.Linker):
         def complete(self):
             return len(self.__stack) == 1
 
-        OBJ_OP_SUB = __argfunc(2)(lambda x,y: x-y)
-        OBJ_OP_ADD = __argfunc(2)(lambda x,y: x+y)
-        OBJ_OP_XOR = __argfunc(2)(lambda x,y: x^y)
-        OBJ_OP_OR  = __argfunc(2)(lambda x,y: x|y)
-        OBJ_OP_AND = __argfunc(2)(lambda x,y: x&y)
-        OBJ_OP_SHL = __argfunc(2)(lambda x,y: x<<y)
-        OBJ_OP_SHR = __argfunc(2)(lambda x,y: x>>y)
-        OBJ_OP_MUL = __argfunc(2)(lambda x,y: x*y)
-        OBJ_OP_DIV = __argfunc(2)(lambda x,y: x//y) #the one thing python3 would do worse on
-        OBJ_OP_MOD = __argfunc(2)(lambda x,y: x%y)
-        OBJ_OP_LOGICOR  = __argfunc(2)(lambda x,y: min(x|y, 1))
-        OBJ_OP_LOGICAND = __argfunc(2)(lambda x,y: min(x&y, 1))
+        OBJ_OP_SUB = _argfunc(2)(lambda x,y: x-y)
+        OBJ_OP_ADD = _argfunc(2)(lambda x,y: x+y)
+        OBJ_OP_XOR = _argfunc(2)(lambda x,y: x^y)
+        OBJ_OP_OR  = _argfunc(2)(lambda x,y: x|y)
+        OBJ_OP_AND = _argfunc(2)(lambda x,y: x&y)
+        OBJ_OP_SHL = _argfunc(2)(lambda x,y: x<<y)
+        OBJ_OP_SHR = _argfunc(2)(lambda x,y: x>>y)
+        OBJ_OP_MUL = _argfunc(2)(lambda x,y: x*y)
+        OBJ_OP_DIV = _argfunc(2)(lambda x,y: x//y) #the one thing python3 would do worse on
+        OBJ_OP_MOD = _argfunc(2)(lambda x,y: x%y)
+        OBJ_OP_LOGICOR  = _argfunc(2)(lambda x,y: min(x|y, 1))
+        OBJ_OP_LOGICAND = _argfunc(2)(lambda x,y: min(x&y, 1))
         
-        @__argfunc(2)
+        @_argfunc(2)
         def OBJ_OP_LOGICNOT(x, y):
             if x == 0:
                 return 1
             else:
                 return 0
         
-        OBJ_OP_LOGICGE  = __argfunc(2)(lambda x,y: int(x >= y))
-        OBJ_OP_LOGICGT  = __argfunc(2)(lambda x,y: int(x > y))
-        OBJ_OP_LOGICLE  = __argfunc(2)(lambda x,y: int(x <= y))
-        OBJ_OP_LOGICLT  = __argfunc(2)(lambda x,y: int(x < y))
-        OBJ_OP_LOGICEQU = __argfunc(2)(lambda x,y: int(x == y))
-        OBJ_OP_LOGICNE  = __argfunc(2)(lambda x,y: int(x != y))
+        OBJ_OP_LOGICGE  = _argfunc(2)(lambda x,y: int(x >= y))
+        OBJ_OP_LOGICGT  = _argfunc(2)(lambda x,y: int(x > y))
+        OBJ_OP_LOGICLE  = _argfunc(2)(lambda x,y: int(x <= y))
+        OBJ_OP_LOGICLT  = _argfunc(2)(lambda x,y: int(x < y))
+        OBJ_OP_LOGICEQU = _argfunc(2)(lambda x,y: int(x == y))
+        OBJ_OP_LOGICNE  = _argfunc(2)(lambda x,y: int(x != y))
         
-        @__argfunc(2)
+        @_argfunc(2)
         def OBJ_FUNC_LOWLIMIT(x, y):
             if (x >= y):
                 raise InvalidPatch
             else:
                 return x
         
-        @__argfunc(2)
+        @_argfunc(2)
         def OBJ_FUNC_HIGHLIMIT(x, y):
             if (x >= y):
                 raise InvalidPatch
             else:
                 return x
         #TODO: Verify bitwise compatibility with XLink
-        OBJ_FUNC_FDIV   = __argfunc(2)(lambda x,y: (x<<16) // y)
-        OBJ_FUNC_FMUL   = __argfunc(2)(lambda x,y: (x//y) >> 16)
-        OBJ_FUNC_FATAN2 = __argfunc(2)(lambda x,y: int(atan2(asm2rad(x), asm2rad(y)) * 65536))
-        OBJ_FUNC_SIN    = __argfunc(1)(lambda x:   int(  sin(asm2rad(x)) * 65536))
-        OBJ_FUNC_COS    = __argfunc(1)(lambda x:   int(  cos(asm2rad(x)) * 65536))
-        OBJ_FUNC_TAN    = __argfunc(1)(lambda x:   int(  tan(asm2rad(x)) * 65536))
-        OBJ_FUNC_ASIN   = __argfunc(1)(lambda x:   int( asin(asm2rad(x)) * 65536))
-        OBJ_FUNC_ACOS   = __argfunc(1)(lambda x:   int( acos(asm2rad(x)) * 65536))
-        OBJ_FUNC_ATAN   = __argfunc(1)(lambda x:   int( atan(asm2rad(x)) * 65536))
+        OBJ_FUNC_FDIV   = _argfunc(2)(lambda x,y: (x<<16) // y)
+        OBJ_FUNC_FMUL   = _argfunc(2)(lambda x,y: (x//y) >> 16)
+        OBJ_FUNC_FATAN2 = _argfunc(2)(lambda x,y: int(atan2(asm2rad(x), asm2rad(y)) * 65536))
+        OBJ_FUNC_SIN    = _argfunc(1)(lambda x:   int(  sin(asm2rad(x)) * 65536))
+        OBJ_FUNC_COS    = _argfunc(1)(lambda x:   int(  cos(asm2rad(x)) * 65536))
+        OBJ_FUNC_TAN    = _argfunc(1)(lambda x:   int(  tan(asm2rad(x)) * 65536))
+        OBJ_FUNC_ASIN   = _argfunc(1)(lambda x:   int( asin(asm2rad(x)) * 65536))
+        OBJ_FUNC_ACOS   = _argfunc(1)(lambda x:   int( acos(asm2rad(x)) * 65536))
+        OBJ_FUNC_ATAN   = _argfunc(1)(lambda x:   int( atan(asm2rad(x)) * 65536))
 
         def OBJ_CONSTANT(self, instr):
             self.__stack.append(instr.__contents__)
@@ -304,28 +303,3 @@ class ASMotorLinker(linker.Linker):
                 secDesc.data[offset] = (interpreter.value >> 24) & 255
             
         return secDesc
-#DEAD CODE AHOY
-
-def makePatchPlan(mapfile):
-    """Given a mapfile object, parse it and convert it to a list of flat-address copies.
-    
-    Every range specified in this copy should be taken from the target (patch) area, rather than the base ROM."""
-    
-    bank = 0x100
-    copies = []
-    
-    for line in mapfile:
-        if line.partition("Bank #")[1] == "Bank #":
-            bank = int(line.partition("Bank #")[2].partition(" ")[0])
-        elif line.partition("  SECTION: ")[1] == "  SECTION: ":
-            astr = line.partition("  SECTION: ")[2]
-            
-            startbyte = int(astr[1:5], 16)
-            length = int(astr[14:18], 16)
-            
-            if startbyte >= 0x8000: #ignore RAM sections
-                break
-            
-            copies.append((banked2flat(bank, startbyte), length))
-    
-    return copies

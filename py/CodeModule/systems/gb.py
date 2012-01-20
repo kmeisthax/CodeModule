@@ -1,6 +1,6 @@
 from CodeModule.exc import *
 from CodeModule.asm import linker
-from CodeModule.systems import BasePlatform
+from CodeModule.systems.helper import BasePlatform
 
 import math, os, struct
 
@@ -162,7 +162,7 @@ class BaseSystem(BasePlatform):
            "maxsegs":1,
            "type":linker.DynamicArea}
     ECHO = {"views":[(0xE000, 0)],
-            "segsize":
+            "segsize":0x1E00,
             "type":linker.ShadowArea,
             "shadows":"WRAM"}
     GROUPMAP = {"CODE": "ROM", "DATA": "ROM", "BSS":"WRAM", "HOME":("ROM", 0), "VRAM":"VRAM", "HRAM":"HRAM"}

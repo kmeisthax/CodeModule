@@ -1,3 +1,10 @@
+class BasePlatform(object):
+    def banked2flat(self, bank, addr):
+        return (0, None)
+    
+    def flat2banked(self, addr, src):
+        return (0, 0)
+
 from CodeModule.systems.gb import VARIANTLIST as GBVariantList
 from CodeModule.asm import asmotor, linker
 from CodeModule.exc import PEBKAC
@@ -28,10 +35,3 @@ def lookup_system_bases(basenames):
             raise PEBKAC
     
     return bases
-
-class BasePlatform(object):
-    def banked2flat(self, bank, addr):
-        return (0, None)
-    
-    def flat2banked(self, addr, src):
-        return (0, 0)

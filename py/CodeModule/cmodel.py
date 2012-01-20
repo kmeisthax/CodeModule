@@ -111,30 +111,6 @@ class CField(object):
     #indicates that your object has subfields useful to it's users.
     PRIMITIVE = True
 
-class Empty(CField):
-    """A field that takes no space and has no contents."""
-    @property
-    def bytes(self):
-        return b""
-    
-    @bytes.setter
-    def bytes(self, obytes):
-        if len(obytes) > 0:
-            raise CorruptedData
-
-    @property
-    def core(self):
-        return None
-    
-    @core.setter
-    def core(self, val):
-        if val is not None:
-            raise CorruptedData
-    
-    @property
-    def bytelength(self):
-        return 0
-
 def Magic(magicbytes):
     class MagicInstance(CField):
         def load(self, fileobj):
@@ -694,7 +670,7 @@ def If(variableName, condition, basetype, *args, **kwargs):
     
     return IfInstance
 
-class EmptyField(cmodel.Field):
+class EmptyField(CField):
     """Base field class for all fields that do not actually parse bytes from the structure."""
     def load(self, fileobj):
         pass
@@ -998,7 +974,7 @@ class _Union(_CFieldDecl):
             return super(_Union, mcls).__new__(mcls, name, bases, cdict)
         #The "Default" class is the type of field that gets used for the mapping
         #if the field is unspecified.
-        defaultField = Empty
+        defaultField = EmptyField
         try:
             defaultField = cdict["__defaultfield__"]
             del cdict["__defaultfield__"]

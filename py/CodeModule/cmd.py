@@ -17,8 +17,9 @@ class commandcls(object):
         self.__parser.set_defaults(func=self)
         self.__curgroup = None
     
-    def __call__(self, resp):
-        self.__func(**(vars(resp)))
+    def __call__(self, resp, *args, **kwargs):
+        kwargs.update(vars(resp))
+        self.__func(*args, **kwargs)
 
 def command(func):
     return commandcls(func)
@@ -50,7 +51,7 @@ logging.basicConfig(format = "[%(asctime)-15s|%(levelno)s|%(name)s|%(filename)s:
 
 def logged(loggername = None, logcalls = False, calllvl = logging.INFO, logexcept = True, exceptlvl = logging.FATAL, logsuccess = False, successlvl = logging.DEBUG):
     def loggedifier(innerfunc):
-        logger = logging.getLogger(loggername)
+        ologger = logging.getLogger(loggername)
         
         def outerfunc(*args, **kwargs):
             logdata = {"ifname": innerfunc.__name__,
@@ -58,20 +59,22 @@ def logged(loggername = None, logcalls = False, calllvl = logging.INFO, logexcep
                      "kwargs": kwargs}
             
             if logcalls:
-                logger.log(calllvl,
+                ologger.log(calllvl,
                     "%(ifname)s called with args: %(args)r and keyword args: %(kwargs)r" % logdata)
             
             try:
-                retval = innerfunc(logger = logger, *args, **kwargs)
+                retval = innerfunc(logger = ologger, *args, **kwargs)
             except Exception as e:
                 if logexcept:
-                    logger.log(exceptlvl, "%(ifname)s raised an exception!" % logdata, exc_info = True)
+                    ologger.log(exceptlvl, "%(ifname)s raised an exception!" % logdata, exc_info = True)
             else:
                 logdata["retval"] = retval
                 
                 if logsuccess:
-                    logger.log(successlvl, "%(ifname)s returned: %(retval)r" % logdata)
+                    ologger.log(successlvl, "%(ifname)s returned: %(retval)r" % logdata)
                 
                 return retval
+        
+        outerfunc.__name__ = innerfunc.__name__
         return outerfunc
     return loggedifier
