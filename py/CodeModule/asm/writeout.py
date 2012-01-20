@@ -1,4 +1,5 @@
 from CodeModule.asm import linker
+import os
 
 class ROMWriteout(object):
     """A Writeout object that saves any interested streams to disk.
@@ -22,10 +23,10 @@ class ROMWriteout(object):
         self.linkerobj = linkerobj
     
     def enterStream(self, streamName, streamSpec):
-        try:
+        if streamName in self.streams.keys()
             self.curFile = self.streams[streamName]
             self.interested = true
-        except KeyError:
+        else:
             self.interested = false
         
         self.streamName = streamName
@@ -47,6 +48,33 @@ class ROMWriteout(object):
     
     def endWrite(self, linkerobj):
         pass
+
+class OverlayWriteout(ROMWriteout):
+    """A Writeout object that overlays new streams over an existing base ROM."""
+    def __init__(self, bases, *args, **kwargs):
+        self.bases = bases
+        super(Writeout, self).__init__(bases, *args, **kwargs)
+    
+    def enterStream(self, streamName, streamSpec):
+        #just-in-time copy from base ROM to output
+        if streamName in self.bases.keys() and streamName in self.streams.keys():
+            frm = self.bases[streamName]
+            to = self.streams[streamName]
+            
+            frm.seek(0, os.SEEK_END)
+            frmlen = frm.tell()
+            
+            frm.seek(0, os.SEEK_SET)
+            to.seek(0, os.SEEK_SET)
+            
+            while frmlen > 0x1000:
+                frmlen -= 0x1000
+                to.write(frm.read(0x1000))
+            
+            to.write(frm.read(frmlen))
+            
+            frm.seek(0, os.SEEK_SET)
+            to.seek(0, os.SEEK_SET)
 
 class MapWriteout(object):
     """Writeout object that creates a report of every symbol used.

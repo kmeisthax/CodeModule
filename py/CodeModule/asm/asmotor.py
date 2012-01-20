@@ -126,38 +126,28 @@ class ASMotorLinker(linker.Linker):
                 if section.data is not None:
                     secDat = section.data.data
                 
-                secdescript = linker.SectionDescriptor(filename, section.name, (bankfix, orgfix), groupdescript["memarea"], section.data.data, section)
+                secdescript = linker.SectionDescriptor(filename, section.name, bankfix, orgfix, groupdescript["memarea"], section.data.data, section)
                 self.addsection(secdescript)
     
     def extractSymbols(self, secdesc):
         """Takes a fixed section and returns all symbols within.
         
-        Returns a dictionary which is structured as so:
-        
-         {"SymName": (linker.Export, None, (BAddr, Addr)),
-           "Import": (linker.Import, None, None),
-            "Local": (linker.Export, [SrcFileName], (BAddr, Addr))}
-            
-        In general, each tuple has one field to determine if a symbol is imported
-        or exported, one field to determine what source files to import/export
-        from (with None meaning Global), and an addressing tuple. The addressing
-        tuple can be None if the address is not yet known.
+        Returns a list of Symbol Descriptors.
         
         Do not run this method until all symbols have been fixed."""
         objSection = secdesc["__base"]
         symList = []
         for symbol in objSection.symbols:
             if symbol.symtype is Symbol.IMPORT:
-                symList.append(linker.SymbolDescriptor(symbol.name, linker.Import, None, None, secdesc))
+                symList.append(linker.SymbolDescriptor(symbol.name, linker.Import, None, None, None, secdesc))
             elif symbol.symtype is Symbol.LOCALIMPORT:
-                symList.append(linker.SymbolDescriptor(symbol.name, linker.Import, secdesc.srcname, None, secdesc))
+                symList.append(linker.SymbolDescriptor(symbol.name, linker.Import, secdesc.srcname, None, None, secdesc))
             else:
-                symAddr = (secdesc.bankfix, secdesc.orgfix + symbol.value)
                 ourLimit = None
                 if symbol.symtype is Symbol.LOCALEXPORT or symbol.symtype is Symbol.LOCAL:
                     ourLimit = secdesc.srcname
                 
-                symList.append(linker.SymbolDescriptor(symbol.name, linker.Export, ourLimit, symAddr, secdesc))
+                symList.append(linker.SymbolDescriptor(symbol.name, linker.Export, ourLimit, secdesc.bankfix, secdesc.orgfix + symbol.value, secdesc))
         
         return symList
     
