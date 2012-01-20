@@ -3,6 +3,7 @@
 Includes linker writeout module."""
 
 from CodeModule import cmodel
+from CodeModule.asm import linker
 from math import ceil
 
 class VarInt(cmodel.Int(-1)):
@@ -111,3 +112,7 @@ def applyPatch(src, patch, tgt):
     tgtBytesCnt = 0
 #UNFINISHED CODE   
 #    for command in 
+
+class Writeout(linker.Writeout):
+    def __init__(self, srcrom):
+        pass

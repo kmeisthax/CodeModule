@@ -281,7 +281,8 @@ class Resolver(object):
     
     ResolutionEntry = namedtuple("ResolutionEntry", ["fromFile", "toFiles", "value"])
 
-    def addSection(self, section, secSymbols):
+    def addSection(self, section):
+        secSymbols = section.symbols
         resolved = {}
         unresolved = {}
 
@@ -364,18 +365,21 @@ class SectionDescriptor(object):
     def __init__(self, *args):
         self.srcname = args[0]
         self.name = args[1]
-        self.addr = args[2]
-        self.memarea = args[3]
-        self.data = args[4]
-        self.sourceobj = args[5]
+        self.bank = args[2]
+        self.org = args[3]
+        self.memarea = args[4]
+        self.data = args[5]
+        self.sourceobj = args[6]
+        self.symbols = None
 
 class SymbolDescriptor(object):
     def __init__(self, *args):
         self.name = args[0]
         self.type = args[1]
         self.limits = args[2]
-        self.addr = args[3]
-        self.section = args[4]
+        self.bank = args[3]
+        self.org = args[4]
+        self.section = args[5]
 
 class Linker(object):
     MemGroup = namedtuple("MemGroup", ["fixator", "sections"])
@@ -428,8 +432,8 @@ class Linker(object):
         """Resolve all symbols."""
         for marea in self.platform.MEMAREAS:
             for section in self.groups[marea].sections:
-                symbols = self.extractSymbols(section)
-                self.resolver.addSection(section, symbols)
+                section.symbols = self.extractSymbols(section)
+                self.resolver.addSection(section)
 
     def patchup(self):
         """Patch up all patch points."""
@@ -447,41 +451,3 @@ class Linker(object):
                 target.writeSection(section)
             target.exitStream(marea, spec)
         target.endWrite(self)
-
-class Writeout(object):
-    def __init__(self, streams, platform, *args, **kwargs):
-        """Create a basic writeout object.
-
-        streams - A dictionary mapping between memory areas and file objects.
-        If a stream does not exist then it will not be written to."""
-        self.streams = streams
-        self.platform = platform
-        
-        super(Writeout, self).__init__(streams, platform, *args, **kwargs)
-    
-    def beginWrite(self, linkerobj):
-        self.linkerobj = linkerobj
-    
-    def enterStream(self, streamName, streamSpec):
-        try:
-            self.curFile = self.streams[streamName]
-            self.interested = true
-        except KeyError:
-            self.interested = false
-        
-        self.streamName = streamName
-        self.streamSpec = streamSpec
-    
-    def writeSection(self, sectionSpec):
-        if not self.interested:
-            return
-        
-        secAddr = self.platform.banked2flat(sectionSpec.bank, sectionSpec.org)
-        self.curFile.seek(secAddr, whence=SEEK_SET)
-        self.curFile.write(sectionSpec.data)
-    
-    def exitStream(self, streamName, streamSpec):
-        pass
-    
-    def endWrite(self, linkerobj):
-        pass
