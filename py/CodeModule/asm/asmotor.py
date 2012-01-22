@@ -3,6 +3,7 @@
 This parses and links ASMotor object files."""
 from CodeModule.asm import linker
 from CodeModule.exc import InvalidPatch
+from CodeModule.cmd import logged
 from CodeModule import cmodel
 
 from math import atan2, pi, sin, cos, tan, asin, acos, atan
@@ -103,7 +104,8 @@ def _argfunc(numargs):
 
 class ASMotorLinker(linker.Linker):
     """Linker mixin for ASMotor object file support."""
-    def loadTranslationUnit(self, filename):
+    @logged("objparse")
+    def loadTranslationUnit(logger, self, filename):
         """Load the translation music and attempt to add the data inside to the linker"""
         with open(filename, "rb") as fileobj:
             objobj = XObj()
@@ -113,8 +115,11 @@ class ASMotorLinker(linker.Linker):
             secmap = []
             
             for group in objobj.groups:
+                logger.debug("Adding section group %(groupname)s" % {"groupname":group.name})
+                
+                gid = len(secmap)
                 secmap.append(group.name)
-                areatoken = self.GROUPMAP[group.name]
+                areatoken = self.platform.GROUPMAP[group.name]
                 groupname = None
                 bankfix = None
                 
@@ -126,22 +131,26 @@ class ASMotorLinker(linker.Linker):
                 except:
                     groupname = areatoken
                 
-                groupdescript = {"memarea": group.typeid}
+                groupdescript = {"memarea": groupname}
                 if bankfix is not None:
                     groupdescript["bankfix"] = bankfix
                 
-                sectionsbin[objobj.groups.index(group)] = groupdescript
+                sectionsbin[gid] = groupdescript
             
             for section in objobj.sections:
-                groupdescript = self.sectionsbin[self.secmap[section.groupid]]
+                if section.groupid == -1:
+                    logger.debug("Ignoring section with invalid groupid")
+                    continue
+                
+                groupdescript = sectionsbin[section.groupid]
                 
                 bankfix = section.bank
                 orgfix = section.org
                 
-                if bankfix is -1:
+                if bankfix == -1:
                     bankfix = None
                 
-                if orgfix is -1:
+                if orgfix == -1:
                     orgfix = None
                 
                 if "bankfix" in groupdescript.keys():
@@ -150,6 +159,8 @@ class ASMotorLinker(linker.Linker):
                 secDat = None
                 if section.data is not None:
                     secDat = section.data.data
+                
+                logger.debug("Adding section %(section)s fixed at (%(bank)r, %(org)r)" % {"section":section.name, "org":orgfix, "bank":bankfix})
                 
                 secdescript = linker.SectionDescriptor(filename, section.name, bankfix, orgfix, groupdescript["memarea"], section.data.data, section)
                 self.addsection(secdescript)
@@ -160,7 +171,7 @@ class ASMotorLinker(linker.Linker):
         Returns a list of Symbol Descriptors.
         
         Do not run this method until all symbols have been fixed."""
-        objSection = secdesc["__base"]
+        objSection = secdesc.sourceobj
         symList = []
         for symbol in objSection.symbols:
             if symbol.symtype is Symbol.IMPORT:

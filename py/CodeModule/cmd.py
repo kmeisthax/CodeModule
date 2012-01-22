@@ -48,7 +48,7 @@ def group(*args, **kwargs):
         return self
     return decorum
 
-logging.basicConfig(format = "[%(relativeCreated)12d|%(levelname)-4.4s|%(name)-4.4s|%(filename)s:%(lineno)d] %(message)s")
+logging.basicConfig(format = "[%(name)-8.8s|%(levelname)-1.1s|%(filename)s:%(lineno)d] %(message)s")
 
 def logged(loggername = None, logcalls = False, calllvl = logging.DEBUG, logexcept = True, exceptlvl = logging.FATAL, catchexcept = False, logsuccess = False, successlvl = logging.DEBUG):
     def loggedifier(innerfunc):

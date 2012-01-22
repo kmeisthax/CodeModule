@@ -51,6 +51,9 @@ from CodeModule.exc import FixationConflict, OutOfSegmentSpace, PEBKAC
 from CodeModule.cmd import logged
 from collections import namedtuple
 
+FixBanksFirst  = 0
+FixOrgsFirst   = 1
+
 class Fixator(object):
     """A class for managing memory allocations on a fixed-size memory area separated into one or more segments.
 
@@ -58,6 +61,7 @@ class Fixator(object):
     manages memory allocations. You tell it about sections with the addSection
     method, then call fixate to assign sections. Finally, you can get a mapping
     between each section and it's bank and memory address."""
+    
     def __init__(self, segmentsize, segids, *args, **kwargs):
         """Create a new Fixator object, with a particular set of segments.
         
@@ -106,7 +110,8 @@ class Fixator(object):
         
         raise OutOfSegmentSpace
     
-    def fixSection(self, bankfix, alloc):
+    @logged("fixsects", logcalls=True)
+    def fixSection(logger, self, bankfix, alloc):
         """Commit a particular memory allocation to a bucket.
 
         Alloc is the object you got back from malloc. Optionally, you made alloc
@@ -148,6 +153,8 @@ class Fixator(object):
         if alloc[1] < oldrange[1]:
             bukkit["freelist"].insert(freeidx, (alloc[1], oldrange[1]))
         
+        logger.debug("Committed to allocation at %(org)d in bank %(bank)d" % {"org":alloc[0], "bank":bankfix})
+        
         #Commit allocation to linker segment descriptor
         alloc[2].bank = bankfix
         alloc[2].org = alloc[0]
@@ -171,9 +178,6 @@ class Fixator(object):
         else:
             #bankfixed only or unfixed sections
             heapq.heappush(self.bankbuckets[bankfix]["unfixed"], (size, section))
-        
-        self.sid += 1
-        return sid
     
     def fixBank(self, bukkitID):
         """For any section in a particular segment, fixate all it's unfixed sections."""
@@ -181,7 +185,7 @@ class Fixator(object):
             try:
                 bukkit = self.bankbuckets[bukkitID]
                 sec = heapq.heappop(bukkit["unfixed"])
-                alloc = self.malloc(sec[0])
+                alloc = self.malloc(bukkit, sec[0])
                 self.fixSection(bukkitID, (alloc[0], alloc[1], sec[1]))
             except IndexError:
                 break
@@ -224,17 +228,14 @@ class Fixator(object):
             self.fixBank(bukkitID)
     
     def fixOrgs(self):
-        while len(self.bankbuckets[-1]["fixed"]) > 0:
-            sec = self.bankbuckets[-1]["fixed"].pop()
+        while len(self.bankbuckets[None]["fixed"]) > 0:
+            sec = self.bankbuckets[None]["fixed"].pop()
             return self.fixIntoOrg(sec)
     
     def fixUnfixed(self):
-        while len(self.bankbuckets[-1]["unfixed"]) > 0:
-            sec = heapq.heappop(self.bankbuckets[-1]["unfixed"])
+        while len(self.bankbuckets[None]["unfixed"]) > 0:
+            sec = heapq.heappop(self.bankbuckets[None]["unfixed"])
             return self.fixSomewhere(sec)
-    
-    FixBanksFirst  = 0
-    FixOrgsFirst   = 1
     
     def fixate(self, fixorder = FixBanksFirst):
         """For any section not already fixated, fixate it.
@@ -435,36 +436,39 @@ class Linker(object):
             self.groups[marea] = Linker.MemGroup(Fixator(segsize, segids), [])
     
     def addsection(self, section):
-        sid = self.groups[section["memarea"]].fixator.addSection(section)
-        self.groups[section["memarea"]].sections.append(section)
+        sid = self.groups[section.memarea].fixator.addSection(section)
+        self.groups[section.memarea].sections.append(section)
     
     def fixate(self):
         """Fix all unfixed known sections into a single core."""
         for marea in self.platform.MEMAREAS:
-            info = getattr(self, marea)
+            info = getattr(self.platform, marea)
             
-            self.groups[marea].fixator.fixate()
+            if marea in self.groups.keys():
+                self.groups[marea].fixator.fixate()
     
     def resolve(self):
         """Resolve all symbols."""
         for marea in self.platform.MEMAREAS:
-            for section in self.groups[marea].sections:
-                section.symbols = self.extractSymbols(section)
-                self.resolver.addSection(section)
+            if marea in self.groups.keys():
+                for section in self.groups[marea].sections:
+                    section.symbols = self.extractSymbols(section)
+                    self.resolver.addSection(section)
 
     def patchup(self):
         """Patch up all patch points."""
         for marea in self.platform.MEMAREAS:
-            for section in self.groups[marea].sections:
-                self.evalPatches(section)
+            if marea in self.groups.keys():
+                for section in self.groups[marea].sections:
+                    self.evalPatches(section)
 
     def writeout(self, target):
         """Expose data to writeout target."""
-        target.beginWrite(self)
-        for marea in self.platform.MEMAREAS:
-            spec = getattr(self, marea)
-            target.enterStream(marea, spec)
-            for section in self.groups[marea].sections:
-                target.writeSection(section)
-            target.exitStream(marea, spec)
-        target.endWrite(self)
+        with target:
+            for marea in self.platform.MEMAREAS:
+                if marea in self.groups.keys():
+                    spec = getattr(self.platform, marea)
+                    target.enterStream(marea, spec)
+                    for section in self.groups[marea].sections:
+                        target.writeSection(section)
+                    target.exitStream(marea, spec)

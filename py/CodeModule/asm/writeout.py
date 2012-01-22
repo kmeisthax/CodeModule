@@ -1,4 +1,5 @@
 from CodeModule.asm import linker
+from CodeModule.cmd import logged
 import os
 
 class ROMWriteout(object):
@@ -16,38 +17,52 @@ class ROMWriteout(object):
         self.curFile = None
         self.streamName = None
         self.streamSpec = None
+        self.interested = False
         
         super(ROMWriteout, self).__init__(*args, **kwargs)
     
-    def beginWrite(self, linkerobj):
-        self.linkerobj = linkerobj
+    def __enter__(self):
+        pass
     
     def enterStream(self, streamName, streamSpec):
         if streamName in self.streams.keys():
-            self.curFile = self.streams[streamName]
-            self.interested = true
+            if type(self.streams[streamName]) is str:
+                self.curFile = open(self.streams[streamName], 'wb')
+            else:
+                self.curFile = self.streams[streamName]
+            
+            self.interested = True
         else:
-            self.interested = false
+            self.interested = False
         
         self.streamName = streamName
         self.streamSpec = streamSpec
     
-    def writeSection(self, sectionSpec):
+    @logged("output")
+    def writeSection(logger, self, sectionSpec):
         if not self.interested:
             return
         
+        logger.debug("Writing section %(name)s out to disk with fix (%(bank)d, %(org)d)..." % sectionSpec.__dict__)
         pos = self.platform.banked2flat(sectionSpec.bank, sectionSpec.org)
         
         assert pos[1] == self.streamName
         
-        self.curFile.seek(pos[0], whence=SEEK_SET)
+        self.curFile.seek(pos[0])
         self.curFile.write(sectionSpec.data)
     
     def exitStream(self, streamName, streamSpec):
-        pass
+        if self.curFile != None:
+            self.curFile.close()
+            self.curFile = None
+        
     
-    def endWrite(self, linkerobj):
-        pass
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.curFile != None:
+            self.curFile.close()
+            self.curFile = None
+        
+        return False
 
 class OverlayWriteout(ROMWriteout):
     """A Writeout object that overlays new streams over an existing base ROM."""
@@ -57,24 +72,28 @@ class OverlayWriteout(ROMWriteout):
     
     def enterStream(self, streamName, streamSpec):
         #just-in-time copy from base ROM to output
-        if streamName in self.bases.keys() and streamName in self.streams.keys():
-            frm = self.bases[streamName]
-            to = self.streams[streamName]
+        super(OverlayWriteout, self).enterStream(streamName, streamSpec)
+        
+        if streamName in self.bases.keys() and self.interested:
+            frmname = self.bases[streamName]
             
-            frm.seek(0, os.SEEK_END)
-            frmlen = frm.tell()
-            
-            frm.seek(0, os.SEEK_SET)
-            to.seek(0, os.SEEK_SET)
-            
-            while frmlen > 0x1000:
-                frmlen -= 0x1000
-                to.write(frm.read(0x1000))
-            
-            to.write(frm.read(frmlen))
-            
-            frm.seek(0, os.SEEK_SET)
-            to.seek(0, os.SEEK_SET)
+            with open(frmname, 'rb') as frm:
+                topos = self.curFile.tell()
+                
+                frm.seek(0, os.SEEK_END)
+                frmlen = frm.tell() - topos
+                
+                frm.seek(topos)
+                self.curFile.seek(topos)
+                
+                while frmlen > 0x1000:
+                    frmlen -= 0x1000
+                    self.curFile.write(frm.read(0x1000))
+                
+                self.curFile.write(frm.read(frmlen))
+                
+                frm.seek(topos)
+                self.curFile.seek(topos)
 
 class MapWriteout(object):
     """Writeout object that creates a report of every symbol used.
@@ -85,10 +104,20 @@ class MapWriteout(object):
         self.mapstream = mapstream
         self.platform = platform
         self.linkerobj = None
+        
+        if type(self.mapstream) is str:
+            self.openFile = true
+        else:
+            self.openFile = false
+            self.mapfile = mapstream
+        
         super(MapWriteout, self).__init__(*args, **kwargs)
     
-    def beginWrite(self, linkerobj):
-        self.linkerobj = linkerobj
+    def __enter__(self, linkerobj):
+        if self.openFile:
+            self.mapfile = open(self.mapstream, 'w')
+        
+        return self
     
     def enterStream(self, streamName, streamSpec):
         self.mapstream.write("%(strn)s AREA:\n" % {"strn":streamName})
@@ -108,5 +137,6 @@ class MapWriteout(object):
     def exitStream(self, streamName, streamSpec):
         pass
     
-    def endWrite(self, linkerobj):
-        pass
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.mapfile.close()
+        return False

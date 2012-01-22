@@ -35,10 +35,10 @@ def link(logger, infiles, infmt, outfiles, baserom, platform, **kwargs):
     wotgt = None
     
     if baserom is not None and baserom != "":
-        wotgt = writeout.OverlayWriteout(bases = {"ROM":baserom},
-            streams = {"ROM":outfiles}, platform = plat)
+        wotgt = writeout.OverlayWriteout(bases = {"ROM":baserom[0]},
+            streams = {"ROM":outfiles[0]}, platform = plat)
     else:
-        wotgt = writeout.ROMWriteout(streams = {"ROM":outfiles}, platform = plat)
+        wotgt = writeout.ROMWriteout(streams = {"ROM":outfiles[0]}, platform = plat)
     
     logdata["lenfname"] = len(infiles)
     

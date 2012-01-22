@@ -413,7 +413,7 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
                         #in byte-counted array mode.
                         raise InvalidSchema
                 
-                if type(sizeParam) is string:
+                if type(sizeParam) is str:
                     self.find_argument_field(sizeParam).tie_to_length(self, "bytes")
             elif countType is EntriesCount:
                 for i in range(0, scount):
@@ -421,7 +421,7 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
                     self.append(item)
                     
                     item.load(fileobj)
-                if type(sizeParam) is string:
+                if type(sizeParam) is str:
                     self.find_argument_field(sizeParam).tie_to_length(self)
             elif countType is ParseToEOF:
                 #determine end position
@@ -515,7 +515,7 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
                     self.append(childItem)
                     obytes = childItem.parsebytes(obytes)
                 
-                if type(sizeParam) is string:
+                if type(sizeParam) is str:
                     self.find_argument_field(sizeParam).tie_to_length(self)
                 return obytes
             elif countType is BytesCount:
@@ -536,7 +536,7 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
                         #we run out of memory.
                         raise InvalidSchema
                 
-                if type(sizeParam) is string:
+                if type(sizeParam) is str:
                     self.find_argument_field(sizeParam).tie_to_length(self, "bytes")
                 return obytes[bytecount:]
             elif countType is ParseToEOF:
