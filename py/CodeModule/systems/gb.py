@@ -32,7 +32,7 @@ class MBC1Mapper(BasePlatform):
            "unusable":[(None, 0x20), (None, 0x40), (None, 0x60)],
            "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
-           "views":[(0xA000, 0x03)],
+           "views":[(0xA000, None)],
            "maxsegs":4,
            "type":linker.PermenantArea}
     
@@ -90,7 +90,7 @@ class MBC3Mapper(BasePlatform):
            "maxsegs":0x80,
            "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
-           "views":[(0xA000, 0x03)],
+           "views":[(0xA000, None)],
            "maxsegs":4,
            "type":linker.PermenantArea}
     
@@ -117,7 +117,7 @@ class MBC5Mapper(BasePlatform):
            "maxsegs":0x200,
            "type":linker.PermenantArea}
     SRAM = {"segsize":0x2000,
-           "views":[(0xA000, 0x10)],
+           "views":[(0xA000, None)],
            "maxsegs":0x10,
            "type":linker.PermenantArea}
     
@@ -187,8 +187,8 @@ class CGB(BaseSystem):
             "views":[(0xC000, 0), (0xD000, (1, 0x8))],
             "maxsegs":8,
             "type":linker.DynamicArea}
-    VRAM = {"segsize":0x1000,
-            "views":[(0x8000, 0), (0x9000, (1, 0x8))],
+    VRAM = {"segsize":0x2000,
+            "views":[(0x8000, None)],
             "maxsegs":2,
             "type":linker.DynamicArea}
     
@@ -226,7 +226,16 @@ class DMG(BaseSystem):
         else:
             return super(BaseSystem, self).banked2flat(bank, addr)
 
-VARIANTLIST = ({"DMG":DMG, "CGB":CGB}, {"Flat":FlatMapper, "MBC1":MBC1Mapper, "MBC2":MBC2Mapper, "MBC3":MBC3Mapper, "MBC5":MBC5Mapper})
+MAPPERLIST = {"flat":(FlatMapper, None),
+    "mbc1":(MBC1Mapper, None),
+    "mbc2":(MBC2Mapper, None),
+    "mbc3":(MBC3Mapper, None),
+    "mbc5":(MBC5Mapper, None)}
+
+VARIANTLIST = {"dmg":(DMG, MAPPERLIST),
+    "gb":(DMG, MAPPERLIST),
+    "cgb":(CGB, MAPPERLIST),
+    "gbc":(CGB, MAPPERLIST)}
 
 def GameboyLinker(variant1, variant2):
     class GameboyLinkerInstance(linker.Linker, variant1, variant2):

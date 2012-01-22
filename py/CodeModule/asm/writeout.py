@@ -17,7 +17,7 @@ class ROMWriteout(object):
         self.streamName = None
         self.streamSpec = None
         
-        super(Writeout, self).__init__(streams, platform, *args, **kwargs)
+        super(ROMWriteout, self).__init__(*args, **kwargs)
     
     def beginWrite(self, linkerobj):
         self.linkerobj = linkerobj
@@ -53,7 +53,7 @@ class OverlayWriteout(ROMWriteout):
     """A Writeout object that overlays new streams over an existing base ROM."""
     def __init__(self, bases, *args, **kwargs):
         self.bases = bases
-        super(Writeout, self).__init__(bases, *args, **kwargs)
+        super(OverlayWriteout, self).__init__(*args, **kwargs)
     
     def enterStream(self, streamName, streamSpec):
         #just-in-time copy from base ROM to output
@@ -85,6 +85,7 @@ class MapWriteout(object):
         self.mapstream = mapstream
         self.platform = platform
         self.linkerobj = None
+        super(MapWriteout, self).__init__(*args, **kwargs)
     
     def beginWrite(self, linkerobj):
         self.linkerobj = linkerobj

@@ -1,7 +1,11 @@
 import argparse, sys, logging
 
 parser = argparse.ArgumentParser(description="Low-level programming/hacking framework")
+parser.add_argument("--loglv", default="INFO")
 subparser = parser.add_subparsers()
+
+def global_options(loglv="NOTSET", **kwargs):
+    logging.getLogger("").setLevel(loglv)
 
 class commandcls(object):
     def __init__(self, wrapped):
@@ -18,7 +22,11 @@ class commandcls(object):
         self.__curgroup = None
     
     def __call__(self, resp, *args, **kwargs):
-        kwargs.update(vars(resp))
+        rkwargs = vars(resp)
+        
+        global_options(**rkwargs)
+        kwargs.update(rkwargs)
+        
         self.__func(*args, **kwargs)
 
 def command(func):
@@ -40,16 +48,9 @@ def group(*args, **kwargs):
         return self
     return decorum
 
-def main(argv = sys.argv):
-    #for right now, just import everything we know has commands
-    #in the future, add some import machinery magic to import everything named "commands"
-    import CodeModule.asm.commands
-    resp = parser.parse_args(argv[1:])
-    resp.func(resp)
+logging.basicConfig(format = "[%(relativeCreated)12d|%(levelname)-4.4s|%(name)-4.4s|%(filename)s:%(lineno)d] %(message)s")
 
-logging.basicConfig(format = "[%(asctime)-15s|%(levelno)s|%(name)s|%(filename)s:%(lineno)d] %(message)s")
-
-def logged(loggername = None, logcalls = False, calllvl = logging.INFO, logexcept = True, exceptlvl = logging.FATAL, logsuccess = False, successlvl = logging.DEBUG):
+def logged(loggername = None, logcalls = False, calllvl = logging.DEBUG, logexcept = True, exceptlvl = logging.FATAL, catchexcept = False, logsuccess = False, successlvl = logging.DEBUG):
     def loggedifier(innerfunc):
         ologger = logging.getLogger(loggername)
         
@@ -63,10 +64,14 @@ def logged(loggername = None, logcalls = False, calllvl = logging.INFO, logexcep
                     "%(ifname)s called with args: %(args)r and keyword args: %(kwargs)r" % logdata)
             
             try:
-                retval = innerfunc(logger = ologger, *args, **kwargs)
+                retval = innerfunc(ologger, *args, **kwargs)
             except Exception as e:
                 if logexcept:
-                    ologger.log(exceptlvl, "%(ifname)s raised an exception!" % logdata, exc_info = True)
+                    ologger.log(exceptlvl, "%(ifname)s raised an exception!" % logdata)
+                    ologger.log(exceptlvl, "Called with args %(args)r and kwargs %(kwargs)r." % logdata, exc_info = True)
+                
+                if not catchexcept:
+                    raise e
             else:
                 logdata["retval"] = retval
                 
@@ -78,3 +83,10 @@ def logged(loggername = None, logcalls = False, calllvl = logging.INFO, logexcep
         outerfunc.__name__ = innerfunc.__name__
         return outerfunc
     return loggedifier
+
+def main(argv = sys.argv):
+    #for right now, just import everything we know has commands
+    #in the future, add some import machinery magic to import everything named "commands"
+    import CodeModule.asm.commands
+    resp = parser.parse_args(argv[1:])
+    resp.func(resp)

@@ -47,7 +47,8 @@ plugin with a stream for each fully linked permenant memory area as well as a
 list of all assembled locations."""
 
 import bisect, heapq
-from CodeModule.exc import FixationConflict, OutOfSegmentSpace
+from CodeModule.exc import FixationConflict, OutOfSegmentSpace, PEBKAC
+from CodeModule.cmd import logged
 from collections import namedtuple
 
 class Fixator(object):
@@ -384,13 +385,22 @@ class SymbolDescriptor(object):
 class Linker(object):
     MemGroup = namedtuple("MemGroup", ["fixator", "sections"])
     
-    def __init__(self, platform):
+    @logged("linker", logcalls=True)
+    def __init__(logger, self, platform):
         self.groups = {}
         self.resolver = Resolver()
         self.platform = platform
         
         for marea in self.platform.MEMAREAS:
             spec = self.platform.__getattribute__(marea)
+            
+            if "shadows" in spec.keys():
+                continue #we don't care
+            
+            logdata = {"marea":marea, "spec":spec}
+            logger.debug("Setting up memory area %(marea)s." % logdata)
+            logger.debug("Spec: %(spec)r" % logdata)
+            
             staticSize = spec["segsize"]
             segCount = spec["maxsegs"]
             
@@ -400,12 +410,19 @@ class Linker(object):
                 segids.append(i)
                 baseAddr = 0
                 for view in spec["views"]:
-                    if type(view[1]) is int and view[1] is i:
+                    if type(view[1]) is int:
+                        if view[1] is i:
+                            baseAddr = view[0]
+                            break
+                    elif view[1] is None:
                         baseAddr = view[0]
                         break
                     elif i >= view[1][0] and i <= view[1][1]:
                         baseAddr = view[0]
                         break
+                else:
+                    logger.error("Memory Area has an unmapped segment!")
+                    raise PEBKAC
                 
                 segsize[i] = (baseAddr, baseAddr+staticSize)
 

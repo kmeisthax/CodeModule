@@ -1,6 +1,7 @@
 from CodeModule.cmd import command, logged, argument, group
 from CodeModule.asm import asmotor, linker, writeout
 from CodeModule.systems.helper import lookup_system_bases
+from CodeModule.exc import PEBKAC
 
 @argument('infiles', nargs = '+', type=str, metavar='foo.o')
 @argument('-f', type=str, metavar="asmotor", default = "asmotor", dest = "infmt")
@@ -16,12 +17,16 @@ def link(logger, infiles, infmt, outfiles, baserom, platform, **kwargs):
         logger.critical("Only ASMotor format objects are currently supported.")
         return
     
-    logger.info("Begin %(fmt)s linking operation with %(platform)r..." % {"fmt":fmt, "platform":platform})
+    platforms = []
     
-    bases = ["linker", fmt]
-    bases.extend(platform)
+    for platformcnk in platform:
+        platforms.extend(platformcnk.split(","))
     
-    platcls = type("platcls", {}, lookup_system_bases(bases))
+    logdata = {"infmt":infmt, "platform":platforms}
+    
+    logger.info("Begin %(infmt)s linking operation with %(platform)r..." % logdata)
+    
+    platcls = type("platcls", lookup_system_bases(platforms), {})
     plat = platcls()
     
     lnk = asmotor.ASMotorLinker(plat)
@@ -35,7 +40,9 @@ def link(logger, infiles, infmt, outfiles, baserom, platform, **kwargs):
     else:
         wotgt = writeout.ROMWriteout(streams = {"ROM":outfiles}, platform = plat)
     
-    logger.info("Loading %(lenfname)d files..." % {"lenfname":len(infiles)})
+    logdata["lenfname"] = len(infiles)
+    
+    logger.info("Loading %(lenfname)d files..." % logdata)
     for fname in infiles:
         lnk.loadTranslationUnit(fname)
     
