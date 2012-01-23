@@ -53,14 +53,14 @@ class Symbol(cmodel.Struct):
     __order__ = ["name", "symtype", "value"]
 
 class Section(cmodel.Struct):
-    groupid = cmodel.LeS32
+    groupid = cmodel.LeS32 #if -1, contains exported symbols only
     name = cmodel.String("ascii")
     bank = cmodel.LeS32
     org = cmodel.LeS32
     numsymbols = cmodel.LeU32
     symbols = cmodel.Array(Symbol, "numsymbols")
     datasize = cmodel.LeU32
-    data = cmodel.If("datasize", lambda x: x > 0, SectionData)
+    data = cmodel.If(lambda self: self.groupid > 0 and self._CField__container._CField__container.groups[self.groupid].typeid == SectionGroup.GROUP_TEXT, SectionData)
     
     __order__ = ["groupid", "name", "bank", "org", "numsymbols", "symbols", "datasize", "data"]
 
@@ -111,6 +111,8 @@ class ASMotorLinker(linker.Linker):
             objobj = XObj()
             objobj.load(fileobj)
             
+            logger.debug("Loading translation unit %(txl)r" % {"txl":objobj.core})
+            
             sectionsbin = {}
             secmap = []
             
@@ -123,12 +125,12 @@ class ASMotorLinker(linker.Linker):
                 groupname = None
                 bankfix = None
                 
-                try: #assume areatoken is a memarea and bankfix token
+                if type(areatoken) is not str:
                     groupname = areatoken[0]
                     bankfix = areatoken[1]
                     #basically this means if you declared the group as ("ROM", 0)
                     #then all sections in that group start at 0.
-                except:
+                else:
                     groupname = areatoken
                 
                 groupdescript = {"memarea": groupname}
@@ -138,11 +140,14 @@ class ASMotorLinker(linker.Linker):
                 sectionsbin[gid] = groupdescript
             
             for section in objobj.sections:
-                if section.groupid == -1:
-                    logger.debug("Ignoring section with invalid groupid")
-                    continue
-                
-                groupdescript = sectionsbin[section.groupid]
+                groupdescript = None
+                if section.groupid == -1 and section.datasize == 0:
+                    logger.debug("Adding symbols section...")
+                else:
+                    #NOTE: If this crashes, and groupid is -1, please investigate
+                    #the debug output from this function. It will tell you exactly
+                    #how the translation unit was parsed.
+                    groupdescript = sectionsbin[section.groupid]
                 
                 bankfix = section.bank
                 orgfix = section.org
@@ -153,16 +158,19 @@ class ASMotorLinker(linker.Linker):
                 if orgfix == -1:
                     orgfix = None
                 
-                if "bankfix" in groupdescript.keys():
+                if groupdescript != None and "bankfix" in groupdescript.keys():
                     bankfix = groupdescript["bankfix"]
                 
                 secDat = None
                 if section.data is not None:
                     secDat = section.data.data
                 
-                logger.debug("Adding section %(section)s fixed at (%(bank)r, %(org)r)" % {"section":section.name, "org":orgfix, "bank":bankfix})
+                marea = None
+                if groupdescript != None:
+                    marea = groupdescript["memarea"]
+                    logger.debug("Adding section %(section)s fixed at (%(bank)r, %(org)r)" % {"section":section.name, "org":orgfix, "bank":bankfix})
                 
-                secdescript = linker.SectionDescriptor(filename, section.name, bankfix, orgfix, groupdescript["memarea"], section.data.data, section)
+                secdescript = linker.SectionDescriptor(filename, section.name, bankfix, orgfix, marea, section.data.data, section)
                 self.addsection(secdescript)
     
     def extractSymbols(self, secdesc):

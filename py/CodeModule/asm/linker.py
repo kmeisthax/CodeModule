@@ -388,7 +388,7 @@ class Linker(object):
     
     @logged("linker", logcalls=True)
     def __init__(logger, self, platform):
-        self.groups = {}
+        self.groups = {None: Linker.MemGroup(None, [])}
         self.resolver = Resolver()
         self.platform = platform
         
@@ -436,7 +436,9 @@ class Linker(object):
             self.groups[marea] = Linker.MemGroup(Fixator(segsize, segids), [])
     
     def addsection(self, section):
-        sid = self.groups[section.memarea].fixator.addSection(section)
+        if len(section.data) > 0:
+            sid = self.groups[section.memarea].fixator.addSection(section)
+        
         self.groups[section.memarea].sections.append(section)
     
     def fixate(self):

@@ -311,10 +311,6 @@ def Int(size, endianness = BigEndian, signedness = Unsigned):
         
         def bytesetter(self, obytes):
             """MASSIVE HACK used so that Enum can set IntInstance.bytes from within Enum.bytes.setter."""
-            if len(obytes) != bytecount:
-                #bytes.setter cannot return extra data, so we only accept
-                #exactly the right amount of data
-                raise CorruptedData
             
             self.__lengthlock = None
             self.__lengthparam = None
@@ -347,6 +343,8 @@ def Int(size, endianness = BigEndian, signedness = Unsigned):
                     result = -(result - highbit)
             
             self.__coreint = result
+            
+            return obytes[bytecount:]
         
         def parsebytes(self, obytes):
             self.bytes = obytes[0:bytecount]
@@ -622,8 +620,29 @@ def Blob(sizeParam):
     
     return BlobInstance
 
-def If(variableName, condition, basetype, *args, **kwargs):
-    """Creates IF-Fields, which only exist if a condition is satisfied in external data."""
+def If(variableName, condition, basetype = None, *args, **kwargs):
+    """Creates IF-Fields, which only exist if a condition is satisfied in external data.
+    
+    Can be called in one of two ways:
+    
+    If("name-of-variable", lambda var: var > 256, OtherType)
+    
+    where there is a single variablename which is looked up and passed to the
+    callable to determine if OtherType should be parsed, or in this way:
+    
+    If(lambda pStruct: pStruct.group > 0, OtherType)
+    
+    where the variablename is omitted and """
+    
+    ctxtprov = lambda s, vn: s.get_dynamic_argument(vn)
+    
+    if basetype == None:
+        basetype = condition
+        condition = variableName
+        variableName = None
+        
+        ctxtprov = lambda s, vn: s._CField__container
+    
     base = None
     if (len(args) == 0 and len(kwargs) == 0):
         base = basetype
@@ -633,39 +652,39 @@ def If(variableName, condition, basetype, *args, **kwargs):
     class IfInstance(base):
         """Conditional load class that turns into an empty value if an external condition is unfulfilled."""
         def load(self, fileobj):
-            if condition(self.get_dynamic_argument(variableName)):
+            if condition(ctxtprov(self, variableName)):
                 super(IfInstance, self).load(fileobj)
         
         def save(self, fileobj):
-            if condition(self.get_dynamic_argument(variableName)):
+            if condition(ctxtprov(self, variableName)):
                 super(IfInstance, self).save(fileobj)
         
         @property
         def core(self):
-            if condition(self.get_dynamic_argument(variableName)):
+            if condition(ctxtprov(self, variableName)):
                 return super(IfInstance, self).core
             else:
                 return None
 
         @core.setter
         def core(self, val):
-            if condition(self.get_dynamic_argument(variableName)):
+            if condition(ctxtprov(self, variableName)):
                 super(IfInstance, self).core = val
 
         @property
         def bytes(self):
-            if condition(self.get_dynamic_argument(variableName)):
+            if condition(ctxtprov(self, variableName)):
                 return super(IfInstance, self).bytes
             else:
                 return None
 
         @bytes.setter
         def bytes(self, val):
-            if condition(self.get_dynamic_argument(variableName)):
+            if condition(ctxtprov(self, variableName)):
                 super(IfInstance, self).bytesetter(val)
         
         def parsebytes(self, obytes):
-            if condition(self.get_dynamic_argument(variableName)):
+            if condition(ctxtprov(self, variableName)):
                 return super(IfInstance, self).parsebytes(obytes)
     
     return IfInstance
@@ -798,16 +817,6 @@ class _CFieldDecl(type):
         #All declarative types have subfields
         cdict["PRIMITIVE"] = False
         return super(_CFieldDecl, mcls).__new__(mcls, name, bases, cdict)
-    
-    @classmethod
-    def exportIntoNamespace(mcls, cdict, values):
-        """Helper method that inserts values into the parent class dictionary."""
-        for value in values:
-            if cdict.keys().count(value) > 0:
-                return cdict
-
-        cdict.update(values)
-        return cdict
 
 class _Struct(_CFieldDecl):
     """Metaclass for all Struct types.
@@ -820,7 +829,7 @@ class _Struct(_CFieldDecl):
         """Metaclass that copies order and the named fields into two class-mangled variables."""
         if name == "Struct" and not mcls.DEFAULT_BASE_MADE:
             #Do nothing if the Struct class hasn't been constructed yet
-            mcls.DefaultBaseMade = True
+            mcls.DEFAULT_BASE_MADE = True
             return super(_Struct, mcls).__new__(mcls, name, bases, cdict)
         order = []
         try:
@@ -832,10 +841,9 @@ class _Struct(_CFieldDecl):
                 cfields[fieldname] = cdict[fieldname]
                 del cdict[fieldname]
                 
-                breakTwice = False
                 try:
                     exVals = cfields[fieldname].EXPORTEDVALUES
-                    cdict = mcls.exportIntoNamespace(cdict, exVals)
+                    cdict.update(exVals)
                 except:
                     pass
         
