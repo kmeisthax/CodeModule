@@ -1,0 +1,29 @@
+equ_macro ::= whitespace identifier whitespace 'EQU' whitespace maths whitespace
+
+set_macro ::= whitespace identifier whitespace 'SET' whitespace maths whitespace
+
+asm_expr ::= label_expr whitespace instr_expr whitespace comment_expr
+    | whitespace instr_expr whitespace comment_expr
+    | whitespace instr_expr whitespace
+
+label_expr ::= exported_label | global_label | local_label
+
+exported_label ::= identifier '::'
+
+global_label ::= identifier | identifier ':'
+
+local_label ::= '.' identifier | '.' identifier ':'
+
+maths ::= 
+
+maths_rvalue ::= identifier | integer
+
+identifier ::= /[A-Za-z_]+[A-Za-z0-9_@#]*/
+
+integer ::= decimal_integer | hexdecimal_integer
+
+decimal_integer ::= /[0-9]+/
+
+hexdecimal_integer ::= /$[0-9A-Fa-f]+/
+
+whitespace ::= /[ \t]*/
