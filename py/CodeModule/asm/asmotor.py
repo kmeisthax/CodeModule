@@ -83,7 +83,7 @@ def _argfunc(numargs):
         
         A normal eval func has the following signature:
         
-            def evalOp(self, instr, stack) --> stack
+            def evalOp(self, instr) --> None
             
         All operations cause side effects on the stack. On the contrary, the
         following signature is much more natural:
@@ -95,9 +95,10 @@ def _argfunc(numargs):
         stack. If the result is not an integer than we will assume it is an
         iterable and copy all of it's elements onto the stack."""
         def decorated (self, instr):
-            args = reversed(self.__stack[-numargs:])
+            for i in range(0, numargs):
+                args.push(self.__stack.pop())
             ret = op(*args)
-            self.__stack.extend(reversed(ret))
+            self.__stack.push(ret)
         
         return decorated
     return decorator

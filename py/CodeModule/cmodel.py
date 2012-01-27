@@ -356,7 +356,7 @@ def Int(size, endianness = BigEndian, signedness = Unsigned):
 
     return IntInstance
 
-LeU8 = BeU8 = Int(8)
+LeU8 = BeU8 = U8 = Int(8)
 LeU16 = Int(16, LittleEndian)
 BeU16 = Int(16, BigEndian)
 LeU24 = Int(24, LittleEndian)

@@ -306,7 +306,7 @@ class Resolver(object):
                 else:
                     self.qwikResolve[symbol.name] = buk
                 
-                bukEntry = Resolver.ResolutionEntry(section.srcname, symbol.limits, symbol.addr)
+                bukEntry = Resolver.ResolutionEntry(section.srcname, symbol.limits, symbol.value)
                 resolved[symbol.name] = bukEntry
                 buk.append(bukEntry)
             else:
@@ -323,7 +323,14 @@ class Resolver(object):
                 resolved = False
                 for candidateSym in self.qwikResolve[symName]:
                     if candidateSym.toFiles is None or symbol.fromFile in candidateSym.toFiles:
-                        symbol.value = candidateSym.value
+                        if symbol.section is not None and symbol.section.org is not None:
+                            #Symbols with an attached section are relative to the
+                            #section and must be orgfixed before we can do anything.
+                            symbol.value = candidateSym.value + symbol.section.org
+                        elif symbol.section is None:
+                            #Symbols without an attached section are defined by
+                            #the assembler macrolanguage and are absolute.
+                            symbol.value = candidateSym.value
                         resolved = True
                         break
                 
@@ -380,7 +387,7 @@ class SymbolDescriptor(object):
         self.type = args[1]
         self.limits = args[2]
         self.bank = args[3]
-        self.org = args[4]
+        self.value = args[4]
         self.section = args[5]
 
 class Linker(object):
@@ -451,11 +458,22 @@ class Linker(object):
     
     def resolve(self):
         """Resolve all symbols."""
+        allsecs = []
         for marea in self.platform.MEMAREAS:
             if marea in self.groups.keys():
-                for section in self.groups[marea].sections:
-                    section.symbols = self.extractSymbols(section)
-                    self.resolver.addSection(section)
+                allsecs.extend(self.groups[marea].sections)
+        
+        symbols = self.extractSymbols(allsecs)
+        
+        for sym in symbols:
+            if sym.section.symbols == None:
+                sym.section.symbols = []
+            
+            if sym.section.symbols.count(sym) < 1:
+                sym.section.symbols.append(sym)
+        
+        for section in allsecs:
+            self.resolver.addSection(section)
 
     def patchup(self):
         """Patch up all patch points."""

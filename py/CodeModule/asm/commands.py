@@ -1,10 +1,10 @@
 from CodeModule.cmd import command, logged, argument, group
-from CodeModule.asm import asmotor, linker, writeout
+from CodeModule.asm import asmotor, linker, writeout, rgbds
 from CodeModule.systems.helper import lookup_system_bases
 from CodeModule.exc import PEBKAC
 
 @argument('infiles', nargs = '+', type=str, metavar='foo.o')
-@argument('-f', type=str, metavar="asmotor", default = "asmotor", dest = "infmt")
+@argument('-f', type=str, metavar="asmotor", default = "rgbds", dest = "infmt")
 @argument('-o', type=str, action="append", metavar='fubarmon.gb', dest = "outfiles")
 @argument('--baserom', type=str, nargs=1, metavar='fubarmon-j.gb', dest = "baserom")
 @argument('-p', type=str, action="append", metavar='gb', dest = "platform")
@@ -12,10 +12,6 @@ from CodeModule.exc import PEBKAC
 @logged("linker")
 def link(logger, infiles, infmt, outfiles, baserom, platform, **kwargs):
     """Link object code into a final format."""
-    
-    if infmt != 'asmotor':
-        logger.critical("Only ASMotor format objects are currently supported.")
-        return
     
     platforms = []
     
@@ -29,7 +25,16 @@ def link(logger, infiles, infmt, outfiles, baserom, platform, **kwargs):
     platcls = type("platcls", lookup_system_bases(platforms), {})
     plat = platcls()
     
-    lnk = asmotor.ASMotorLinker(plat)
+    lnk = None
+    
+    if infmt == 'asmotor':
+        lnk = asmotor.ASMotorLinker(plat)
+        return
+    elif infmt == 'rgbds':
+        lnk = rgbds.RGBDSLinker(plat)
+    else:
+        logger.fatal("Unknown object code format.")
+        return
 
     #Create writeout object
     wotgt = None
