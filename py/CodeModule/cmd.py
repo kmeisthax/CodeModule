@@ -88,5 +88,7 @@ def main(argv = sys.argv):
     #for right now, just import everything we know has commands
     #in the future, add some import machinery magic to import everything named "commands"
     import CodeModule.asm.commands
+    import CodeModule.fileops.cmp
+    
     resp = parser.parse_args(argv[1:])
     resp.func(resp)

@@ -6,6 +6,6 @@ setup(name = "CodeModule",
     description = "Python utility for dealing with low-level programs.",
     author = "David Wendt",
     author_email = "dcrkid@yahoo.com",
-    packages = ["CodeModule", "CodeModule.asm", "CodeModule.systems"],
+    packages = ["CodeModule", "CodeModule.asm", "CodeModule.systems", "CodeModule.fileops"],
     package_dir = {'': "py"},
     scripts = ["scripts/codemodule"])
