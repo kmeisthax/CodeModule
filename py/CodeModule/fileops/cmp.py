@@ -95,10 +95,28 @@ def bincmp(logger, cmpfiles, conwid, filtered, verbose, **kwargs):
     if curdiff is not None:
         difflist.append(curdiff)
     
-    output = []
-    
     #Determine the optimal size for a particular console width
     maxchars = conwid // 4
+    
+    #merge similar segments together
+    olddifflist = difflist
+    difflist = []
+    
+    for olddiff in olddifflist:
+        if len(difflist) == 0:
+            difflist.append(olddiff)
+            continue
+        
+        targetdiff = difflist[-1]
+        
+        #if the space between two diffs is less than one console line,
+        #merge the two diffs together
+        if abs(targetdiff[1] - olddiff[0]) < maxchars:
+            targetdiff[1] = olddiff[1]
+        else:
+            difflist.append(olddiff)
+    
+    output = []
     
     for diffrange in difflist:
         output.append("Difference from 0x%(begin)X to 0x%(end)X" % {"begin":diffrange[0], "end":diffrange[1]})
