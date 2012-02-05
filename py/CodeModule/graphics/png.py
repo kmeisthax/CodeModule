@@ -2349,17 +2349,20 @@ def testWithIO(inp, out, f):
     """Calls the function `f` with ``sys.stdin`` changed to `inp`
     and ``sys.stdout`` changed to `out`.  They are restored when `f`
     returns.  This function returns whatever `f` returns.
+    
+    This function was altered to alter the binary-mode buffer of stdio,
+    for Python 3 compatibility.
     """
 
     import os
 
     try:
-        oldin,sys.stdin = sys.stdin,inp
-        oldout,sys.stdout = sys.stdout,out
+        oldin,sys.stdin.buffer = sys.stdin.buffer,inp
+        oldout,sys.stdout.buffer = sys.stdout.buffer,out
         x = f()
     finally:
-        sys.stdin = oldin
-        sys.stdout = oldout
+        sys.stdin.buffer = oldin
+        sys.stdout.buffer = oldout
     if os.environ.get('PYPNG_TEST_TMP') and hasattr(out,'getvalue'):
         name = mycallersname()
         if name:
@@ -3456,7 +3459,7 @@ def test_suite(options, args):
                     alpha=options.alpha,
                     compression=options.compression,
                     interlace=options.interlace)
-    writer.write_array(sys.stdout, pixels)
+    writer.write_array(sys.stdout.buffer, pixels)
 
 def read_pam_header(infile):
     """
@@ -3723,13 +3726,13 @@ def _main(argv):
     # Prepare input and output files
     if len(args) == 0:
         infilename = '-'
-        infile = sys.stdin
+        infile = sys.stdin.buffer
     elif len(args) == 1:
         infilename = args[0]
         infile = open(infilename, 'rb')
     else:
         parser.error("more than one input file")
-    outfile = sys.stdout
+    outfile = sys.stdout.buffer
 
     if options.read_png:
         # Encode PNG to PPM
