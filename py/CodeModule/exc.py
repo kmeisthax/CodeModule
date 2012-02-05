@@ -7,11 +7,13 @@ class InvalidScript(Exception):
     pass
 
 class CorruptedData(Exception):
-    """Exception raised when an attempt to parse data from a file fails because some sanity check failed."""
+    """Exception raised when an attempt to parse data from a file fails because
+    some sanity check failed."""
     pass
 
 class InvalidSchema(Exception):
-    """Exception raised when the specification for parsing data from a file is inconsistent or otherwise invalid."""
+    """Exception raised when the specification for parsing data from a file is
+    inconsistent or otherwise invalid."""
     pass
 
 class PEBKAC(Exception):
@@ -19,12 +21,25 @@ class PEBKAC(Exception):
     pass
 
 class FixationConflict(Exception):
-    """Exception raised when the attempted fixation of a section would cause it to occupy another section's memory."""
+    """Exception raised when the attempted fixation of a section would cause it
+    to occupy another section's memory."""
     pass
 
 class OutOfSegmentSpace(Exception):
-    """Exception raised when a section cannot be fixated because the enclosing segment is out of room, either due to genuine lack of space, or because of internal fragmentation from user orgfixed sections."""
+    """Exception raised when a section cannot be fixated because the enclosing
+    segment is out of room, either due to genuine lack of space, or because of
+    internal fragmentation from user orgfixed sections."""
     pass
 
 class InvalidPatch(Exception):
-    """Exception raised when an assembler fixup patch is malformed and does not make sense."""
+    """Exception raised when an assembler fixup patch is malformed and does not
+    make sense."""
+
+class ImageEncodingFailed(Exception):
+    """Exception raised whenever an attempt is made to encode an image to an
+    image format in a way that does not match the format's limitations."""
+
+class MultiLoopBreak(Exception):
+    """Exception that should only be used to break out of multiple loops.
+    
+    It is programmer error for this exception to not be caught."""
