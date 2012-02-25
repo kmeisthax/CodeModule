@@ -5,9 +5,10 @@ import os
 @argument("-w", type=int, default=80, dest="conwid", help="Maximum width of verbose detail lines.")
 @argument("-f", action="append", nargs=2, dest="filtered", help="Specify [x,y) ranges of bytes to avoid reporting on.")
 @argument("-v", action="store_const", const=True, default=False, dest="verbose", help="Enable difference detail lines.")
+@argument("-p", action="store_const", const=True, default=False, dest="pretty", help="Pretty-print option. Merges diffs close together and makes all diffs print as wide as the console (see -w)")
 @command
 @logged("cmp")
-def bincmp(logger, cmpfiles, conwid, filtered, verbose, **kwargs):
+def bincmp(logger, cmpfiles, conwid, filtered, verbose, pretty, **kwargs):
     curdiff = None #list of [0,1) set ranges on the whole list of files
     difflist = []
     files = []
@@ -99,22 +100,23 @@ def bincmp(logger, cmpfiles, conwid, filtered, verbose, **kwargs):
     maxchars = conwid // 4
     
     #merge similar segments together
-    olddifflist = difflist
-    difflist = []
-    
-    for olddiff in olddifflist:
-        if len(difflist) == 0:
-            difflist.append(olddiff)
-            continue
+    if pretty:
+        olddifflist = difflist
+        difflist = []
         
-        targetdiff = difflist[-1]
-        
-        #if the space between two diffs is less than one console line,
-        #merge the two diffs together
-        if abs(targetdiff[1] - olddiff[0]) < maxchars:
-            targetdiff[1] = olddiff[1]
-        else:
-            difflist.append(olddiff)
+        for olddiff in olddifflist:
+            if len(difflist) == 0:
+                difflist.append(olddiff)
+                continue
+            
+            targetdiff = difflist[-1]
+            
+            #if the space between two diffs is less than one console line,
+            #merge the two diffs together
+            if abs(targetdiff[1] - olddiff[0]) < maxchars:
+                targetdiff[1] = olddiff[1]
+            else:
+                difflist.append(olddiff)
     
     output = []
     
@@ -126,8 +128,12 @@ def bincmp(logger, cmpfiles, conwid, filtered, verbose, **kwargs):
             tpos = diffrange[0]
             while tpos < diffrange[1]:
                 for fileobj, filesize in files:
+                    eol = min(maxchars, tpos - diffrange[1])
+                    if pretty:
+                        eol = maxchars
+                    
                     psdat = []
-                    for pos in range(tpos, tpos+maxchars):
+                    for pos in range(tpos, tpos+eol):
                         if pos < filesize:
                             fileobj.seek(pos)
                             by = fileobj.read(1)
@@ -142,7 +148,7 @@ def bincmp(logger, cmpfiles, conwid, filtered, verbose, **kwargs):
                     
                     output.append("%s\n" % "".join(psdat))
                 output.append("\n")
-                tpos += maxchars
+                tpos += eol
         else:
             output.append("\n")
     
