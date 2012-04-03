@@ -69,6 +69,80 @@ class Rgb2(cmodel.Struct):
 
 _gnummap = {0:"BSS", 1:"VRAM", 2:"CODE", 3:("HOME", 0), 4:"HRAM"}
 
+#Used to communicate if you want a symbol's value or it's bank
+SymValue = 0
+SymBank = 1
+
+class FixInterpreter(object):
+    """Fix-up patch interpreter for RGBDS object format."""
+    def __init__(self, symLookup):
+        """Create a patch interpreter."""
+        self.__symLookup = symLookup
+        self.__stack = []
+    
+    @property
+    def value(self):
+        return self.__stack[-1]
+
+    @property
+    def complete(self):
+        return len(self.__stack) == 1
+#"ADD", "SUB", "MUL", "DIV", "MOD", "NEGATE", "OR", "AND", "XOR", "NOT", "BOOLNOT", "CMPEQ", "CMPNE", "CMPGT", "CMPLT", "CMPGE", "CMPLE", "SHL", "SHR", "BANK", "FORCE_HRAM", "FORCE_TG16_ZP", "RANGECHECK", ("LONG", 0x80), ("SymID", 0x81))
+    SUB = _argfunc(2)(lambda x,y: x-y)
+    ADD = _argfunc(2)(lambda x,y: x+y)
+    XOR = _argfunc(2)(lambda x,y: x^y)
+    OR  = _argfunc(2)(lambda x,y: x|y)
+    AND = _argfunc(2)(lambda x,y: x&y)
+    SHL = _argfunc(2)(lambda x,y: x<<y)
+    SHR = _argfunc(2)(lambda x,y: x>>y)
+    MUL = _argfunc(2)(lambda x,y: x*y)
+    DIV = _argfunc(2)(lambda x,y: x//y) #the one thing python3 would do worse on :P
+    MOD = _argfunc(2)(lambda x,y: x%y)
+    
+    @_argfunc(2)
+    def BOOLNOT(x, y):
+        if x == 0:
+            return 1
+        else:
+            return 0
+    
+    CMPGE = _argfunc(2)(lambda x,y: int(x >= y))
+    CMPGT = _argfunc(2)(lambda x,y: int(x > y))
+    CMPLE = _argfunc(2)(lambda x,y: int(x <= y))
+    CMPLT = _argfunc(2)(lambda x,y: int(x < y))
+    CMPEQ = _argfunc(2)(lambda x,y: int(x == y))
+    CMPNE = _argfunc(2)(lambda x,y: int(x != y))
+    
+    def RANGECHECK(self, instr):
+        tocheck = self.__stack.pop()
+        if tocheck < instr.__contents__.hilimit and tocheck > instr.__contents__.lolimit:
+            self.__stack.push(tocheck)
+        else:
+            raise InvalidPatch
+
+    def LONG(self, instr):
+        self.__stack.append(instr.__contents__)
+
+    def SymID(self, instr):
+        self.__stack.append(self.__symLookup(SymValue, instr.__contents__))
+        
+    def BANK(self, instr):
+        self.__stack.append(self.__symLookup(SymBank, instr.__contents__))
+
+    @_argfunc(1)
+    def FORCE_HRAM(val):
+        if val > 0xFEFF and val < 0x10000:
+            return val & 0xFF
+        else:
+            raise InvalidPatch
+    
+    @_argfunc(1)
+    def FORCE_TG16_ZP(val):
+        if val > 0x1FFF and val < 0x2100:
+            return val & 0xFF
+        else:
+            raise InvalidPatch
+
 class RGBDSLinker(linker.Linker):
     @logged("objparse")
     def loadTranslationUnit(logger, self, filename):
@@ -149,78 +223,6 @@ class RGBDSLinker(linker.Linker):
         
         return symList
     
-    class FixInterpreter(object):
-        def __init__(self, symLookup):
-            self.__symLookup = symLookup
-            self.__stack = []
-        
-        @property
-        def value(self):
-            return self.__stack[-1]
-
-        @property
-        def complete(self):
-            return len(self.__stack) == 1
-#"ADD", "SUB", "MUL", "DIV", "MOD", "NEGATE", "OR", "AND", "XOR", "NOT", "BOOLNOT", "CMPEQ", "CMPNE", "CMPGT", "CMPLT", "CMPGE", "CMPLE", "SHL", "SHR", "BANK", "FORCE_HRAM", "FORCE_TG16_ZP", "RANGECHECK", ("LONG", 0x80), ("SymID", 0x81))
-        SUB = _argfunc(2)(lambda x,y: x-y)
-        ADD = _argfunc(2)(lambda x,y: x+y)
-        XOR = _argfunc(2)(lambda x,y: x^y)
-        OR  = _argfunc(2)(lambda x,y: x|y)
-        AND = _argfunc(2)(lambda x,y: x&y)
-        SHL = _argfunc(2)(lambda x,y: x<<y)
-        SHR = _argfunc(2)(lambda x,y: x>>y)
-        MUL = _argfunc(2)(lambda x,y: x*y)
-        DIV = _argfunc(2)(lambda x,y: x//y) #the one thing python3 would do worse on
-        MOD = _argfunc(2)(lambda x,y: x%y)
-        
-        @_argfunc(2)
-        def BOOLNOT(x, y):
-            if x == 0:
-                return 1
-            else:
-                return 0
-        
-        CMPGE = _argfunc(2)(lambda x,y: int(x >= y))
-        CMPGT = _argfunc(2)(lambda x,y: int(x > y))
-        CMPLE = _argfunc(2)(lambda x,y: int(x <= y))
-        CMPLT = _argfunc(2)(lambda x,y: int(x < y))
-        CMPEQ = _argfunc(2)(lambda x,y: int(x == y))
-        CMPNE = _argfunc(2)(lambda x,y: int(x != y))
-        
-        def RANGECHECK(self, instr):
-            tocheck = self.__stack.pop()
-            if tocheck < instr.__contents__.hilimit and tocheck > instr.__contents__.lolimit:
-                self.__stack.push(tocheck)
-            else:
-                raise InvalidPatch
-
-        def LONG(self, instr):
-            self.__stack.append(instr.__contents__)
-
-        def SymID(self, instr):
-            self.__stack.append(self.__symLookup(RGBDSLinker.SymValue, instr.__contents__))
-            
-        def BANK(self, instr):
-            self.__stack.append(self.__symLookup(RGBDSLinker.SymBank, instr.__contents__))
-
-        @_argfunc(1)
-        def FORCE_HRAM(val):
-            if val > 0xFEFF and val < 0x10000:
-                return val & 0xFF
-            else:
-                raise InvalidPatch
-        
-        @_argfunc(1)
-        def FORCE_TG16_ZP(val):
-            if val > 0x1FFF and val < 0x2100:
-                return val & 0xFF
-            else:
-                raise InvalidPatch
-    
-    #Special values used for the interpreter
-    SymValue = 0
-    SymBank = 1
-    
     def evalPatches(self, secDesc):
         """Given a section, evaluate all of it's patches and apply them.
         
@@ -231,14 +233,14 @@ class RGBDSLinker(linker.Linker):
         def symLookupCbk(mode, arg):
             """Special callback for handling lookups from the symbol interpreter."""
             symbol = section.symbols[arg]
-            if mode is RGBDSLinker.SymValue:
+            if mode is SymValue:
                 return self.resolver.lookup(section.name, symbol.name).value
-            elif mode is RGBDSLinker.SymBank:
+            elif mode is SymBank:
                 return self.resolver.lookup(section.name, symbol.name).section.bankfix
         
         for patch in section.datsec.patches:
             curpatch = patch
-            interpreter = RGBDSLinker.FixInterpreter(symLookupCbk)
+            interpreter = FixInterpreter(symLookupCbk)
             for opcode in patch.expression:
                 getattr(interpret, opcode.__tag__)(opcode)
             
