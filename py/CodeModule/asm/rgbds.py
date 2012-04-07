@@ -73,6 +73,18 @@ _gnummap = {0:"BSS", 1:"VRAM", 2:"CODE", 3:("HOME", 0), 4:"HRAM"}
 SymValue = 0
 SymBank = 1
 
+class RGBDSModuleFormat(object):
+    def __init__(self):
+        pass
+    
+    def begin_module(self, module, fileobj):
+        self.module = module
+        self.fileobj = fileobj
+        self.rgbmod = Rgb2()
+    
+    def end_module(self):
+        self.rgbmod.save(self.fileobj)
+
 class FixInterpreter(object):
     """Fix-up patch interpreter for RGBDS object format."""
     def __init__(self, symLookup):
