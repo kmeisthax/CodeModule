@@ -1,5 +1,5 @@
 from CodeModule import cmodel
-from CodeModule.asm import linker
+from CodeModule.asm import linker, emitter
 from CodeModule.cmd import logged
 from CodeModule.asm.asmotor import _argfunc  #TODO: make patch execution generic
 
@@ -38,6 +38,7 @@ class Rgb2SectionData(cmodel.Struct):
 class Rgb2Section(cmodel.Struct):
     datasize = cmodel.LeU32
     sectype = cmodel.Enum(cmodel.U8, "BSS", "VRAM", "CODE", "HOME", "HRAM")
+    #Org or bank == -1 indicates unspecified (e.g. None)
     org = cmodel.LeS32
     bank = cmodel.LeS32
     datsec = cmodel.If("sectype", lambda x: x in [2, 3], Rgb2SectionData)
@@ -46,6 +47,7 @@ class Rgb2Section(cmodel.Struct):
 
 class Rgb2SymValue(cmodel.Struct):
     sectionid = cmodel.LeU32
+    #value is section-relative if sectionid is valid
     value = cmodel.LeU32
     
     __order__ = ["sectionid", "value"]
@@ -68,6 +70,13 @@ class Rgb2(cmodel.Struct):
     __order__ = ["magic", "numsyms", "numsects", "symbols", "sections"]
 
 _gnummap = {0:"BSS", 1:"VRAM", 2:"CODE", 3:("HOME", 0), 4:"HRAM"}
+_gbmemmap = {"ROM":"CODE", "WRAM":"BSS", "VRAM":"VRAM", "HRAM":"HRAM"}
+_patchtypemap = {(8, emitter.LittleEndian):Rgb2Patch.BYTE,
+    (8, emitter.BigEndian):Rgb2Patch.BYTE,
+    (16, emitter.LittleEndian):Rgb2Patch.LE16,
+    (16, emitter.BigEndian):Rgb2Patch.BE16,
+    (32, emitter.LittleEndian):Rgb2Patch.LE32,
+    (32, emitter.BigEndian):Rgb2Patch.BE32}
 
 #Used to communicate if you want a symbol's value or it's bank
 SymValue = 0
@@ -77,11 +86,127 @@ class RGBDSModuleFormat(object):
     def __init__(self):
         pass
     
+    def get_symid(self, labelname, ltype):
+        if labelname in self.symbol_dict.keys():
+            oldlabel = self.symbol_dict[labelname]
+            return oldlabel
+        else:
+            newlabel = Rgb2Symbol()
+            newlabel.name = labelname
+            newlabel.symtype = ltype
+            
+            self.rgbmod.symbols.append(newlabel)
+            self.label_counter += 1
+            self.symbol_dict[labelname] = self.label_counter
+            
+            return self.label_counter
+    
     def begin_module(self, module, fileobj):
         self.module = module
         self.fileobj = fileobj
         self.rgbmod = Rgb2()
+        self.section_counter = -1
+        self.label_counter = -1
+        self.symbol_dict = {}
+        self.line_counter = 0
     
+    def begin_section(self, secname, orgspec):
+        self.rgbsec = Rgb2Section()
+        self.secdata = b""
+        self.section_counter += 1
+        
+        self.rgbsec.sectype = getattr(Rgb2Section, _gbmemmap[orgspec[1]])
+        if self.rgbsec.sectype in [2,3]:
+            self.rgbsec.datsec = Rgb2SectionData()
+        else:
+            self.rgbsec.datasize = 0
+        
+        if orgspec[2] != None:
+            self.rgbsec.bank = orgspec[2]
+        else:
+            self.rgbsec.bank = -1
+        
+        if orgspec[3] != None:
+            self.rgbsec.org = orgspec[3]
+        else:
+            self.rgbsec.org = -1
+
+    def add_label(self, name):
+        newsym = self.rgbmod.symbols[self.get_symid(name, Rgb2Sym.LOCAL)]
+        
+        nsymval = Rgb2SymValue()
+        nsymval.sectionid = self.section_counter
+        nsymval.value = len(self.secdata)
+        newsym.value = nsymval
+    
+    def append_data(self, data):
+        self.secdata += data
+    
+    def append_reference(self, bitwidth, endianness, label_ref):
+        basepoint = len(self.secdata)
+        self.secdata += b"\x00" * (bitwidth / 8)
+        
+        if self.rgbsec.sectype in [2,3]:
+            rpatch = Rgb2Patch()
+            rpatch.patchoffset = basepoint
+            rpatch.patchtype = _patchtypemap[(bitwidth, endianness)]
+            
+            try:
+                rpatch.srcfile = self.module.srcfile
+            except Exception as e:
+                rpatch.srcfile = "/dev/null"
+            
+            rpatch.srcline = self.line_counter
+            
+            for cmd in label_ref.promiserpn:
+                rpexpr = Rgb2PatchExpr()
+                if type(cmd) == type(0):
+                    rpexpr.__tag__ = Rgb2PatchExpr.LONG
+                    rpexpr.LONG = cmd
+                elif cmd[0] == "REF":
+                    if cmd[2] == "bank":
+                        rpexpr.__tag__ = Rgb2PatchExpr.BANK
+                        rpexpr.BANK = self.get_symid(cmd[1].name, Rgb2Sym.IMPORT)
+                    else:
+                        rpexpr.__tag__ = Rgb2PatchExpr.SymID
+                        rpexpr.SymID = self.get_symid(cmd[1].name, Rgb2Sym.IMPORT)
+                elif cmd[0] == "RANGECHECK":
+                    rck = Rgb2LimitExpr()
+                    rck.lolimit = cmd[1]
+                    rck.hilimit = cmd[2]
+                    rpexpr.__tag__ = Rgb2PatchExpr.RANGECHECK
+                    rpexpr.RANGECHECK = rck
+                else:
+                    rpexpr.__tag__ = getattr(Rgb2PatchExpr, cmd[0])
+                
+                rpatch.patchexprs.append(rpexpr)
+            
+            self.rgbsec.datsec.patches.append(rpatch)
+    
+    def skip_ahead(self, numbytes):
+        #RGBDS doesn't support truely empty bytes (since it was never intended
+        #to assemble patches) and therefore we just add zero bytes anyway.
+        self.secdata += b"\x00" * numbytes
+    
+    def line(self, line_counter = None):
+        if line_counter == None:
+            self.line_counter += 1
+        else:
+            self.line_counter = line_counter
+    
+    def export_label(self, label_name):
+        rsym = self.rgbmod.symbols[self.get_symid(label_name, Rgb2Symbol.EXPORT)]
+        rsym.type = Rgb2Symbol.EXPORT
+    
+    def define_symbol(self, name, value):
+        rsym = self.rgbmod.symbols[self.get_symid(label_name, Rgb2Symbol.EXPORT)]
+    
+    def end_section(self, name, orgspec):
+        if self.rgbsec.sectype in [2,3]:
+            self.rgbsec.datsec.data = self.secdata
+        
+        self.rgbmod.append(self.rgbsec)
+                    
     def end_module(self):
         self.rgbmod.save(self.fileobj)
 

@@ -87,13 +87,13 @@ class _Promise(object):
     def gameboy_hram_check(self):
         newpromise = _Promise()
         newpromise.promiserpn.extend(self.promiserpn)
-        newpromise.append("FORCE_HRAM")
+        newpromise.append(("FORCE_HRAM"))
         return newpromise
     
     def tg16_zp_check(self):
         newpromise = _Promise()
         newpromise.promiserpn.extend(self.promiserpn)
-        newpromise.append("FORCE_TG16_ZP")
+        newpromise.append(("FORCE_TG16_ZP"))
         return newpromise
     
     def rangecheck(self, lolimit, hilimit):
@@ -110,11 +110,11 @@ class Symbol(object):
     
     @property
     def ref_value(self):
-        return _Promise((self, "org"))
+        return _Promise(("REF", self, "org"))
     
     @property
     def ref_bank(self):
-        return _Promise((self, "bank"))
+        return _Promise(("REF", self, "bank"))
     
     @property
     def value(self):
@@ -173,6 +173,15 @@ class Label(Symbol):
         self.contents.append(("sp", numbytes))
         self.__len += numbytes
     
+    def emit_line(self, line_counter=None):
+        """Specify what source file line generated the following instructions.
+        
+        If line_counter is not specified, it will specify "the next line"
+        (relative to the previous specified line).
+        
+        Not required, only really useful for debugging user source."""
+        self.contents.append(("ln", line_counter))
+    
     @property
     def size(self):
         return self.__len
@@ -192,8 +201,7 @@ class Section(object):
         self.module = module
         self.labels = []
         
-        platform = module.platform
-        self.orgspec = (getattr(platform, memarea), bank, org)
+        self.orgspec = (module.platform, memarea, bank, org)
     
     def create_label(self, name):
         """Add a label to the section."""
@@ -215,6 +223,7 @@ class Module(object):
     that."""
     def __init__(self, platform):
         self.sections = []
+        self.exports = []
         self.platform = platform
     
     def create_section(self, memarea, org = None, bank = None):
@@ -226,6 +235,7 @@ class Module(object):
         """Export a label such that other modules may use it.
         
         Exported labels MUST have a defined name that's unique to the module."""
+        self.exports.append(label)
     
     def export_module(self, format, fileobj):
         """Save the entire module to a file using the format object."""
@@ -244,6 +254,16 @@ class Module(object):
                         format.append_reference(*command[1:])
                     elif command[0] == "sp":
                         format.skip_ahead(*command[1:])
+                    elif command[0] == "ln":
+                        format.line(*command[1:])
                 
             format.end_section(section.name, section.orgspec)
+        
+        for label in self.exports:
+            if "section" in label.__dict__.keys():
+                format.export_label(label.name)
+            else:
+                format.define_symbol(label.name, label.value)
+                format.export_label(label.name)
+        
         format.end_module(self, fileobj)
