@@ -124,6 +124,7 @@ class Fixator(object):
         
         #verify the allocation
         allocidx = bisect.bisect(bukkit["fixed"], (alloc[0], -1))
+        
         if allocidx > 0:
             #sections were fixed before thyself
             offender = bukkit["fixed"][allocidx - 1]
@@ -131,7 +132,7 @@ class Fixator(object):
                 #Allocation is impossible
                 raise FixationConflict
         
-        if allocidx < len(bukkit["fixed"]):
+        if allocidx < len(bukkit["fixed"]) - 1:
             offender2 = bukkit["fixed"][allocidx + 1]
             if alloc[1] > offender2[0]:
                 #Allocation is also impossible
@@ -141,7 +142,7 @@ class Fixator(object):
 
         bukkit["fixed"].insert(allocidx, alloc)
         freeidx = bisect.bisect(bukkit["freelist"], (alloc[0], -1))
-        if freeidx > 0 and bukkit["freelist"][freeidx - 1][0] > alloc[0]:
+        if freeidx > 0 and bukkit["freelist"][freeidx - 1][0] < alloc[0]:
             freeidx -= 1
         
         oldrange = bukkit["freelist"][freeidx]
@@ -149,6 +150,7 @@ class Fixator(object):
         
         if oldrange[0] < alloc[0]:
             bukkit["freelist"].insert(freeidx, (oldrange[0], alloc[0]))
+            freeidx += 1
         
         if alloc[1] < oldrange[1]:
             bukkit["freelist"].insert(freeidx, (alloc[1], oldrange[1]))

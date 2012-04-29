@@ -705,6 +705,10 @@ class EmptyField(CField):
     
     def parsebytes(self, obytes):
         return obytes
+    
+    @property
+    def core(self):
+        return None
 
 def BitRange(targetParam, fromBits, toBits):
     """Define a range of bits shadowed from another field.

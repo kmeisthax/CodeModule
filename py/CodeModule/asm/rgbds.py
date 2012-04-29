@@ -157,10 +157,15 @@ class RGBDSLinker(linker.Linker):
             secmap = []
             
             for section in objobj.sections:
-                groupdescript = self.platform.GROUPMAP[_gnummap[section.sectype]]
-                
                 bankfix = section.bank
                 orgfix = section.org
+                
+                stype = _gnummap[section.sectype]
+                if type(stype) == tuple:
+                    bankfix = stype[1]
+                    stype = stype[0]
+                
+                groupdescript = self.platform.GROUPMAP[stype]
                 
                 if bankfix == -1:
                     bankfix = None
@@ -202,7 +207,7 @@ class RGBDSLinker(linker.Linker):
         for fileobj in fileslist:
             for symbol in fileobj.symbols:
                 if symbol.symtype is Rgb2Symbol.IMPORT:
-                    for secidx, secdesc in files2sec[fileobj].index():
+                    for secidx, secdesc in files2sec[fileobj].items():
                         symList.append(linker.SymbolDescriptor(symbol.name, linker.Import, None, None, None, secdesc))
                 else:
                     secdesc = None
