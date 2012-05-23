@@ -34,12 +34,23 @@ class OutOfSegmentSpace(Exception):
 class InvalidPatch(Exception):
     """Exception raised when an assembler fixup patch is malformed and does not
     make sense."""
+    pass
 
-class ImageEncodingFailed(Exception):
+class GraphicsException(Exception):
+    pass
+
+class ImageEncodingFailed(GraphicsException):
     """Exception raised whenever an attempt is made to encode an image to an
     image format in a way that does not match the format's limitations."""
+    pass
+
+class ImageDecodingFailed(GraphicsException):
+    """Exception raised whenever an attempt is made to decode an image from an
+    image format that is improperly formatted."""
+    pass
 
 class MultiLoopBreak(Exception):
     """Exception that should only be used to break out of multiple loops.
     
     It is programmer error for this exception to not be caught."""
+    pass
