@@ -15,9 +15,10 @@ def bincmp(logger, cmpfiles, conwid, filtered, verbose, pretty, **kwargs):
     maxsize = 0
     
     #manually parse filtered list
-    for filterchunk in filtered:
-        filterchunk[0] = int(filterchunk[0], 0)
-        filterchunk[1] = int(filterchunk[1], 0)
+    if filtered is not None:
+        for filterchunk in filtered:
+            filterchunk[0] = int(filterchunk[0], 0)
+            filterchunk[1] = int(filterchunk[1], 0)
     
     #determine the size of each file
     for filename in cmpfiles:
