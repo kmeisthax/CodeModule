@@ -13,7 +13,8 @@ class FlatMapper(BasePlatform):
            "views":[(0xA000, 0)],
            "maxsegs":1,
            "type":linker.PermenantArea}
-    
+
+    @classmethod
     def banked2flat(self, bank, addr):
         """Convert a Gameboy bank number and Z80 address to a flat ROM address and stream name."""
         
@@ -23,6 +24,16 @@ class FlatMapper(BasePlatform):
             return ((addr - 0x9FFF), "SRAM")
         else:
             return super(FlatMapper, self).banked2flat(bank, addr)
+
+    @classmethod
+    def flat2banked(self, addr, src):
+        """Convert a flat address and memory area name to Gameboy bank number and Z80 address."""
+        if src == "ROM":
+            return (0, addr)
+        elif src == "SRAM":
+            return (0, addr + 0xA000)
+        else:
+            return super(FlatMapper, self).flat2banked(bank, addr)
             
 
 class MBC1Mapper(BasePlatform):
@@ -35,7 +46,8 @@ class MBC1Mapper(BasePlatform):
            "views":[(0xA000, None)],
            "maxsegs":4,
            "type":linker.PermenantArea}
-    
+
+    @classmethod
     def banked2flat(self, bank, addr):
         """Convert a Gameboy bank number and Z80 address to a flat ROM address."""
         
@@ -56,6 +68,22 @@ class MBC1Mapper(BasePlatform):
         else:
             return super(MBC1Mapper, self).banked2flat(bank, addr)
 
+    @classmethod
+    def flat2banked(self, addr, src):
+        """Convert a flat address and memory area name to Gameboy bank number and Z80 address."""
+        if src == "ROM":
+            bank = addr // 0x4000
+            
+            base = 0
+            if bank > 0:
+                base = 0x4000
+            
+            return (bank, addr % 0x4000 + base)
+        elif src == "SRAM":
+            return (addr // 0x2000, (addr % 0x2000) + 0xA000)
+        else:
+            return super(MBC1Mapper, self).flat2banked(bank, addr)
+
 class MBC2Mapper(BasePlatform):
     ROM = {"segsize":0x4000,
            "views":[(0, 0), (0x4000, (1, 0x10))],
@@ -66,7 +94,8 @@ class MBC2Mapper(BasePlatform):
            "views":[(0xA000, 0)],
            "maxsegs":1,
            "type":linker.PermenantArea}
-    
+
+    @classmethod
     def banked2flat(self, bank, addr):
         """Convert a Gameboy bank number and Z80 address to a flat ROM address."""
         
@@ -84,6 +113,22 @@ class MBC2Mapper(BasePlatform):
         else:
             return super(MBC2Mapper, self).banked2flat(bank, addr)
 
+    @classmethod
+    def flat2banked(self, addr, src):
+        """Convert a flat address and memory area name to Gameboy bank number and Z80 address."""
+        if src == "ROM":
+            bank = addr // 0x4000
+            
+            base = 0
+            if bank > 0:
+                base = 0x4000
+            
+            return (bank, addr % 0x4000 + base)
+        elif src == "SRAM":
+            return (addr // 0x2000, (addr % 0x2000) + 0xA000)
+        else:
+            return super(MBC2Mapper, self).flat2banked(bank, addr)
+
 class MBC3Mapper(BasePlatform):
     ROM = {"segsize":0x4000,
            "views":[(0, 0), (0x4000, (1, 0x80))],
@@ -93,7 +138,8 @@ class MBC3Mapper(BasePlatform):
            "views":[(0xA000, None)],
            "maxsegs":4,
            "type":linker.PermenantArea}
-    
+
+    @classmethod
     def banked2flat(self, bank, addr):
         """Convert a Gameboy bank number and Z80 address to a flat ROM address."""
         
@@ -111,6 +157,22 @@ class MBC3Mapper(BasePlatform):
         else:
             return super(MBC3Mapper, self).banked2flat(bank, addr)
 
+    @classmethod
+    def flat2banked(self, addr, src):
+        """Convert a flat address and memory area name to Gameboy bank number and Z80 address."""
+        if src == "ROM":
+            bank = addr // 0x4000
+            
+            base = 0
+            if bank > 0:
+                base = 0x4000
+            
+            return (bank, addr % 0x4000 + base)
+        elif src == "SRAM":
+            return (addr // 0x2000, (addr % 0x2000) + 0xA000)
+        else:
+            return super(MBC3Mapper, self).flat2banked(bank, addr)
+
 class MBC5Mapper(BasePlatform):
     ROM = {"segsize":0x4000,
            "views":[(0, 0), (0x4000, (1, 0x200))],
@@ -121,6 +183,7 @@ class MBC5Mapper(BasePlatform):
            "maxsegs":0x10,
            "type":linker.PermenantArea}
     
+    @classmethod
     def banked2flat(self, bank, addr):
         """Convert a Gameboy bank number and Z80 address to a flat ROM address.
         
@@ -143,8 +206,24 @@ class MBC5Mapper(BasePlatform):
         else:
             return super(MBC5Mapper, self).banked2flat(bank, addr)
 
+    @classmethod
+    def flat2banked(self, addr, src):
+        """Convert a flat address and memory area name to Gameboy bank number and Z80 address."""
+        if src == "ROM":
+            bank = addr // 0x4000
+            
+            base = 0
+            if bank > 0:
+                base = 0x4000
+            
+            return (bank, addr % 0x4000 + base)
+        elif src == "SRAM":
+            return (addr // 0x2000, (addr % 0x2000) + 0xA000)
+        else:
+            return super(MBC3Mapper, self).flat2banked(bank, addr)
+
 class BaseSystem(BasePlatform):
-    MEMAREAS = ["ROM", "VRAM", "SRAM", "WRAM", "HRAM", "OAM", "ECHO", "IOSPACE", "INTMASK"]
+    MEMAREAS = ["ROM", "VRAM", "SRAM", "WRAM", "HRAM", "OAM", "IOSPACE", "INTMASK"]
     IOSPACE = {"views":[(0xFF00, 0)],
                "segsize":128,
                "maxsegs":1,
@@ -166,7 +245,8 @@ class BaseSystem(BasePlatform):
             "type":linker.ShadowArea,
             "shadows":"WRAM"}
     GROUPMAP = {"CODE": "ROM", "DATA": "ROM", "BSS":"WRAM", "HOME":("ROM", 0), "VRAM":"VRAM", "HRAM":"HRAM"}
-    
+
+    @classmethod
     def banked2flat(self, bank, addr):
         if addr > 0xFDFF and addr < 0xFEA0:
             return (addr - 0xFE00, "OAM")
@@ -175,12 +255,25 @@ class BaseSystem(BasePlatform):
         elif addr > 0xFF7F and addr < 0xFFFF:
             return (addr - 0xFF80, "HRAM")
         elif addr > 0xDFFF and addr < 0xFE00:
-            newresp = self.banked2flat(addr - 0x2000)
-            return (newresp[0], "ECHO")
+            return self.banked2flat(addr - 0x2000)
         elif addr == 0xFFFF:
             return (0, "INTMASK")
         else:
             return super(BaseSystem, self).banked2flat(bank, addr)
+
+    @classmethod
+    def flat2banked(self, addr, src):
+        """Convert a flat address and memory area name to Gameboy bank number and Z80 address."""
+        if src == "OAM":
+            return (0, addr + 0xFE00)
+        elif src == "IOSPACE":
+            return (0, addr + 0xFF00)
+        elif src == "HRAM":
+            return (0, addr + 0xFF80)
+        elif src == "INTMASK":
+            return (0, addr)
+        else:
+            return super(BaseSystem, self).flat2banked(bank, addr)
 
 class CGB(BaseSystem):
     WRAM = {"segsize":0x1000,
