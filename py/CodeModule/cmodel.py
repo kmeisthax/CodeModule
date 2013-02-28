@@ -200,7 +200,10 @@ def String(encoding = "utf-8"):
             return self.core
     return StringInstance
 
-def UnterminatedString(sizeParam, encoding = "utf-8"):
+def UnterminatedString(sizeParam, encoding = "utf-8", allow_decoding_failure = False):
+    """Create an instance of a known-length, non-terminated string field.
+    
+    allow_decoding_failure: If decoding a bytestring fails, type will act as a Blob."""
     #Assumes countType = ByteCount for now, add support for EntriesCount later
     class UnterminatedStringInstance(CField):
         def __init__(self, *args, **kwargs):
@@ -220,19 +223,35 @@ def UnterminatedString(sizeParam, encoding = "utf-8"):
 
         @core.setter
         def core(self, val):
-            self.__corestr = val
+            if type(val) is bytes:
+                self.bytes = val
+            else:
+                self.bytes = val.encode(encoding)
         
         @property
         def bytes(self):
-            return self.__corestr.encode(encoding)
+            if type(self.__corestr) is not bytes:
+                return self.__corestr.encode(encoding)
+            else:
+                return self.__corestr
         
         @bytes.setter
         def bytes(self, inbytes):
-            if self.bytelength != len(inbytes):
-                self.set_dynamic_argument(sizeParam, len(inbytes))
-                self.__corestr = inbytes.decode(encoding)
-            else:
-                self.__corestr = inbytes.decode(encoding)
+            try:
+                if self.bytelength != len(inbytes):
+                    self.set_dynamic_argument(sizeParam, len(inbytes))
+                    self.__corestr = inbytes.decode(encoding)
+                else:
+                    self.__corestr = inbytes.decode(encoding)
+            except UnicodeDecodeError:
+                if allow_decoding_failure:
+                    if self.bytelength != len(inbytes):
+                        self.set_dynamic_argument(sizeParam, len(inbytes))
+                        self.__corestr = inbytes
+                    else:
+                        self.__corestr = inbytes
+                else:
+                    raise
         
         @property
         def bytelength(self):
