@@ -587,10 +587,17 @@ def Blob(sizeParam):
     class BlobInstance(CField):
         def __init__(self, *args, **kwargs):
             self.__obytes = b""
+            if type(sizeParam) is int:
+                self.__obytes = bytes(sizeParam)
+            
             super(BlobInstance, self).__init__(*args, **kwargs)
         
         def load(self, fileobj):
-            self.bytes = fileobj.read(self.get_dynamic_argument(sizeParam))
+            count = sizeParam
+            if type(sizeParam) is not int:
+                count = self.get_dynamic_argument(sizeParam)
+            
+            self.bytes = fileobj.read(count)
         
         @property
         def bytes(self):
@@ -598,11 +605,19 @@ def Blob(sizeParam):
         
         @bytes.setter
         def bytes(self, obytes):
-            self.__obytes = obytes
-            self.set_dynamic_argument(sizeParam, len(obytes))
+            if len(obytes) != len(self.__obytes):
+                #WARNING: Assumes non-fixed-length field.
+                #If fixed-length, do not send irregularly sized data
+                self.set_dynamic_argument(sizeParam, len(obytes))
+                self.__obytes = obytes
+            else:
+                self.__obytes = obytes
         
         def parsebytes(self, obytes):
-            count = self.get_dynamic_argument(sizeParam)
+            count = sizeParam
+            if type(sizeParam) is not int:
+                count = self.get_dynamic_argument(sizeParam)
+            
             self.bytes = obytes[0:count]
             return obytes[count:-1]
         
@@ -612,11 +627,21 @@ def Blob(sizeParam):
         
         @core.setter
         def core(self, nbytes):
-            self.bytes = nbytes
+            if type(sizeParam) is not int:
+                self.set_dynamic_argument(sizeParam, len(nbytes))
+                self.bytes = nbytes
+            else:
+                if count > len(nbytes):
+                    self.bytes = nbytes[:count] + bytes(count - len(nbytes))
+                else:
+                    self.bytes = nbytes[:count]
         
         @property
         def bytelength(self):
-            raise PEBKAC #this could be supported, but we dont yet
+            if type(sizeParam) is not int:
+                return self.get_dynamic_argument(sizeParam)
+            else:
+                return sizeParam
     
     return BlobInstance
 
