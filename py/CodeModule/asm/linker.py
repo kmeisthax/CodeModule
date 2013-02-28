@@ -366,11 +366,12 @@ MapIntoBanks  = 1 #SNES style bank mapping
 #(Entire local memory a single view to a larger memory space)
 
 #Memory area types
-PermenantArea = 0 # Memory area is subject to writeout, and present at program
-                  # startup
-DynamicArea   = 1 # Memory area is not written out, and must be iniialized by
-                  # program code
+PermenantArea = 0 # Memory area is part of the program and must be written out.
+DynamicArea   = 1 # Memory area is altered by the program and does not persist
+                  # across program shutdown and startup.
 ShadowArea    = 2 # Memory area is the same as another area.
+SaveArea      = 3 # Memory area is altered by the program and persists across
+                  # program shutdown and startup.
 
 class SectionDescriptor(object):
     def __init__(self, *args):

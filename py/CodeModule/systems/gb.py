@@ -122,10 +122,10 @@ class BaseSystem(BasePlatform):
 
 class RomHeader(cmodel.Struct):
     logo = cmodel.Blob(48)
-    title = cmodel.UnterminatedString(11, "ascii", allow_encoding_failure = True)
-    mfxr_code = cmodel.UnterminatedString(4, "ascii", allow_encoding_failure = True)
+    title = cmodel.UnterminatedString(11, "ascii", allow_decoding_failure = True)
+    mfxr_code = cmodel.UnterminatedString(4, "ascii", allow_decoding_failure = True)
     cgb_flag = cmodel.LeU8
-    new_licensee = cmodel.UnterminatedString(2, "ascii", allow_encoding_failure = True)
+    new_licensee = cmodel.UnterminatedString(2, "ascii", allow_decoding_failure = True)
     sgb_flag = cmodel.LeU8
     cartridge_type = cmodel.LeU8
     rom_size = cmodel.LeU8
@@ -138,8 +138,10 @@ class RomHeader(cmodel.Struct):
     
     __order__ = ["logo", "title", "mfxr_code", "cgb_flag", "new_licensee", "sgb_flag", "cartridge_type", "rom_size", "ram_size", "destination_code", "old_licensee", "rom_version", "header_checksum", "rom_checksum"]
 
-def identify_file(self, fileobj, filename = None):
+def identify_file(fileobj, filename = None):
     """Attempt to identify Game Boy cartridge ROMs."""
+
+    results = []
     base_score = 0      #Score for being a Gameboy ROM
     dmg_score  = 0      #Score for being intended for Gameboy Color
     cgb_score  = 0      #Score for being intended for Gameboy Color
@@ -155,7 +157,9 @@ def identify_file(self, fileobj, filename = None):
         rh.load(fileobj)
         
         base_score += 1 #1 point for RomHeader loading properly
-        
+    except:
+        raise
+    else:
         #Check validity of Nintendo logo
         nintendo_logo = b"\xCE\xED\x66\x66\xCC\x0D\x00\x0B\x03\x73\x00\x83\x00\x0C\x00\x0D\x00\x08\x11\x1F\x88\x89\x00\x0E\xDC\xCC\x6E\xE6\xDD\xDD\xD9\x99\xBB\xBB\x67\x63\x6E\x0E\xEC\xCC\xDD\xDC\x99\x9F\xBB\xB9\x33\x3E"
         if rh.logo == nintendo_logo:
@@ -180,44 +184,41 @@ def identify_file(self, fileobj, filename = None):
         
         #Mapper detection
         if rh.cartridge_type in [0x00, 0x08, 0x09]:
-            mapper_scores.append(1, "flat")
+            mapper_scores.append((1, "flat"))
         
         if rh.cartridge_type in [0x01, 0x02, 0x03]:
-            mapper_scores.append(1, "mbc1")
+            mapper_scores.append((1, "mbc1"))
         
         if rh.cartridge_type in [0x05, 0x06]:
-            mapper_scores.append(1, "mbc2")
+            mapper_scores.append((1, "mbc2"))
         
         if rh.cartridge_type in [0x0F, 0x10, 0x11, 0x12, 0x13]:
-            mapper_scores.append(1, "mbc3")
-        
-        if rh.cartridge_type in [0x15, 0x16, 0x17]:
-            mapper_scores.append(1, "mbc4")
+            mapper_scores.append((1, "mbc3"))
+#       TODO: Reenable when I find MBC4 documentation        
+#        if rh.cartridge_type in [0x15, 0x16, 0x17]:
+#            mapper_scores.append((1, "mbc4"))
         
         if rh.cartridge_type in [0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E]:
-            mapper_scores.append(1, "mbc5")
-    except:
-        pass
+            mapper_scores.append((1, "mbc5"))
+        
+        if len(mapper_scores) > 0:
+            gb_base = DMG
+            if (base_score + cgb_score) > (base_score + dmg_score):
+                gb_base = CGB
+                base_score += cgb_score
+            else:
+                base_score += dmg_score
+            
+            mapper_scores.sort()
+            best_mapper = {"flat":FlatMapper,
+                           "mbc1":MBC1Mapper,
+                           "mbc2":MBC2Mapper,
+                           "mbc3":MBC3Mapper,
+                           "mbc5":MBC5Mapper}[mapper_scores[-1][-1]]
+            base_score += mapper_scores[-1][0]
+            
+            results.append({"class_bases":(gb_base, best_mapper), "score":base_score, "name":"Gameboy ROM Image", "stream":"ROM"})
     
-    results = []
-    
-    gb_base = DMG
-    if (base_score + cgb_score) > (base_score + dmg_score):
-        gb_base = CGB
-        base_score += cgb_score
-    else:
-        base_score += dmg_score
-    
-    mapper_scores.sort()
-    best_mapper = {"flat":FlatMapper,
-                   "mbc1":MBC1Mapper,
-                   "mbc2":MBC2Mapper,
-                   "mbc3":MBC3Mapper,
-                   "mbc4":MBC4Mapper,
-                   "mbc5":MBC5Mapper}[mapper_scores[-1][-1]]
-    base_score += mapper_scores[-1][0]
-    
-    results.append({"class_bases":(gb_base, best_mapper), "score":base_score, "name":"Gameboy ROM Image", "stream":"ROM"})
     return results
 
 class FlatMapper(BasePlatform):

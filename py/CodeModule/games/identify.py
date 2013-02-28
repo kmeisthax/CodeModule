@@ -1,6 +1,7 @@
+from CodeModule.cmd import command, logged, argument, group
 from CodeModule.systems import gb
 
-IDENTIFY_LIST = [gb.identify]
+IDENTIFY_LIST = [gb.identify_file]
 
 @argument("files", nargs = "+", type=str, metavar='foo.rom', help="List of files to identify")
 @command
@@ -10,15 +11,18 @@ def identify(logger, files, **kwargs):
     
     for filename in files:
         fileobj = open(filename, "rb")
+        if fileobj is None:
+            print("File " + filename + " does not exist or could not be opened")
+            continue
         
-        result = fileobj.identify_stream(fileobj, filename)
+        result = identify_stream(fileobj, filename)
         
         if result is None:
-            print "File " + fileobj + " could not be identified"
+            print("File " + filename + " could not be identified")
         else:
-            print "File " + fileobj + " is " + result["name"] + " with score " + result["score"]
+            print("File " + filename + " is " + result["name"] + " with score " + str(result["score"]))
 
-def identify_stream(self, fileobj, filename = None):
+def identify_stream(fileobj, filename = None):
     """Given a file object and optional name, identify what the file is."""
     results = []
     

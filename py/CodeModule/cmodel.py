@@ -144,7 +144,7 @@ def Magic(magicbytes):
 
     return MagicInstance
 
-def String(encoding = "utf-8"):
+def String(encoding = "utf-8", terminator = "\u0000"):
     class StringInstance(CField):
         def __init__(self, *args, **kwargs):
             self.__corestr = ""
@@ -208,7 +208,7 @@ def UnterminatedString(sizeParam, encoding = "utf-8", allow_decoding_failure = F
     class UnterminatedStringInstance(CField):
         def __init__(self, *args, **kwargs):
             self.__corestr = ""
-            super(StringInstance, self).__init__(*args, **kwargs)
+            super(UnterminatedStringInstance, self).__init__(*args, **kwargs)
         
         def load(self, fileobj):
             count = sizeParam
