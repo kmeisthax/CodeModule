@@ -172,9 +172,9 @@ def identify_file(self, fileobj, filename = None):
             base_score += 1
         
         #Extra points for CGB support
-        if rh.cgb_flag = 0x80:
+        if rh.cgb_flag == 0x80:
             cgb_score += 5          #5 points towards CGB over DMG if supported
-        elif rh.cgb_flag = 0xC0:
+        elif rh.cgb_flag == 0xC0:
             dmg_score -= 1000000    #Heavily weigh against DMG analysis if ROM indicates CGB required
             cgb_score += 10         #10 points if required
         
