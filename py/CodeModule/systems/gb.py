@@ -1,8 +1,224 @@
 from CodeModule.exc import *
 from CodeModule.asm import linker
 from CodeModule.systems.helper import BasePlatform
+from CodeModule import cmodel
 
 import math, os, struct
+
+class BaseSystem(BasePlatform):
+    """Base class implementation of a Gameboy.
+    
+    You must combine this class with a system (DMG or GBC) and cartridge mapper before it can be used."""
+    
+    MEMAREAS = ["ROM", "VRAM", "SRAM", "WRAM", "HRAM", "OAM", "IOSPACE", "INTMASK"]
+    IOSPACE = {"views":[(0xFF00, 0)],
+               "segsize":128,
+               "maxsegs":1,
+               "type":linker.DynamicArea}
+    INTMASK = {"views":[(0xFFFF, 0)],
+               "segsize":1,
+               "maxsegs":1,
+               "type":linker.DynamicArea}
+    HRAM = {"views":[(0xFF80, 0)],
+            "segsize":127,
+            "maxsegs":1,
+            "type":linker.DynamicArea}
+    OAM = {"views":[(0xFE00, 0)],
+           "segsize":0xA0,
+           "maxsegs":1,
+           "type":linker.DynamicArea}
+    ECHO = {"views":[(0xE000, 0)],
+            "segsize":0x1E00,
+            "type":linker.ShadowArea,
+            "shadows":"WRAM"}
+    GROUPMAP = {"CODE": "ROM", "DATA": "ROM", "BSS":"WRAM", "HOME":("ROM", 0), "VRAM":"VRAM", "HRAM":"HRAM"}
+    
+    @classmethod
+    def banked2flat(self, bank, addr):
+        if addr > 0xFDFF and addr < 0xFEA0:
+            return (addr - 0xFE00, "OAM")
+        elif addr > 0xFEFF and addr < 0xFF80:
+            return (addr - 0xFF00, "IOSPACE")
+        elif addr > 0xFF7F and addr < 0xFFFF:
+            return (addr - 0xFF80, "HRAM")
+        elif addr > 0xDFFF and addr < 0xFE00:
+            return self.banked2flat(addr - 0x2000)
+        elif addr == 0xFFFF:
+            return (0, "INTMASK")
+        else:
+            return super(BaseSystem, self).banked2flat(bank, addr)
+    
+    @classmethod
+    def flat2banked(self, addr, src):
+        """Convert a flat address and memory area name to Gameboy bank number and Z80 address."""
+        if src == "OAM":
+            return (0, addr + 0xFE00)
+        elif src == "IOSPACE":
+            return (0, addr + 0xFF00)
+        elif src == "HRAM":
+            return (0, addr + 0xFF80)
+        elif src == "INTMASK":
+            return (0, addr)
+        else:
+            return super(BaseSystem, self).flat2banked(bank, addr)
+    
+    def __init__(self):
+        self.streams = {}
+    
+    def install_stream(self, fileobj, area = "ROM", bus = "main"):
+        """Install a file stream into a particular area, such as ROM."""
+        self.streams[area] = fileobj
+    
+    def bus_read(self, bank, addr, bytecount = 1, bus = "main"):
+        """Execute a read from Z80 space, returning the byte(s) at that address.
+        
+        Internally, this uses installed streams. Use install_stream to add one."""
+        
+        out_bytes = b""
+        
+        for i in range(0, bytecount):
+            linear_addr, area = self.banked2flat(bank, addr)
+            self.streams[area].seek(linear_addr)
+            out_bytes += self.streams[area].read(1)
+        
+        return out_bytes
+    
+    def bus_write(self, bank, addr, datum, bus = "main"):
+        """Execute a write from Z80 space, returning the byte(s) at that address.
+        
+        Internally, this uses installed streams. Use install_stream to add one."""
+        
+        for databyte in datum:
+            linear_addr, area = self.banked2flat(bank, addr)
+            self.streams[area].seek(linear_addr)
+            out_bytes += self.streams[area].write(databyte)
+        
+        return out_bytes
+    
+    @property
+    def resources_list(self):
+        """Obtain a list of resources that this game has that can be modified."""
+        return ["rom_header"]
+    
+    def resource_information(self, resource_type):
+        if resource_type == "rom_header":
+            return {"class":RomHeader}
+    
+    def extract_resource(self, resource_type, resource_id):
+        if resource_type == "rom_header":
+            self.streams["ROM"].seek(0x104)
+            RomHeader.load(self.streams["ROM"])
+            return RomHeader(self)
+    
+    def inject_resource(self, resource_type, resource_id, resource):
+        if resource_type == "rom_header":
+            ires = resource
+            if type(resource) is not RomHeader:
+                ires = RomHeader()
+                ires.core = resource
+            
+            self.streams["ROM"].seek(0x104)
+            ires.save(self.streams["ROM"])
+
+class RomHeader(cmodel.Struct):
+    logo = cmodel.Blob(48)
+    title = cmodel.UnterminatedString(11, "ascii", allow_encoding_failure = True)
+    mfxr_code = cmodel.UnterminatedString(4, "ascii", allow_encoding_failure = True)
+    cgb_flag = cmodel.LeU8
+    new_licensee = cmodel.UnterminatedString(2, "ascii", allow_encoding_failure = True)
+    sgb_flag = cmodel.LeU8
+    cartridge_type = cmodel.LeU8
+    rom_size = cmodel.LeU8
+    ram_size = cmodel.LeU8
+    destination_code = cmodel.LeU8
+    old_licensee = cmodel.LeU8
+    rom_version = cmodel.LeU8
+    header_checksum = cmodel.LeU8
+    rom_checksum = cmodel.BeU16 #why big endian? why not?
+    
+    __order__ = ["logo", "title", "mfxr_code", "cgb_flag", "new_licensee", "sgb_flag", "cartridge_type", "rom_size", "ram_size", "destination_code", "old_licensee", "rom_version", "header_checksum", "rom_checksum"]
+
+def identify_file(self, fileobj, filename = None):
+    """Attempt to identify Game Boy cartridge ROMs."""
+    base_score = 0      #Score for being a Gameboy ROM
+    dmg_score  = 0      #Score for being intended for Gameboy Color
+    cgb_score  = 0      #Score for being intended for Gameboy Color
+    mapper_scores = []  #Score for having various mappers attached
+    
+    try:
+        if filename != None and os.path.splitext(filename)[1] in ["gb", "gbc"]:
+            base_score += 1         #1 point for having the right file extension
+        
+        #ROM Header test check
+        rh = RomHeader()
+        fileobj.seek(0x104)
+        rh.load(fileobj)
+        
+        base_score += 1 #1 point for RomHeader loading properly
+        
+        #Check validity of Nintendo logo
+        nintendo_logo = b"\xCE\xED\x66\x66\xCC\x0D\x00\x0B\x03\x73\x00\x83\x00\x0C\x00\x0D\x00\x08\x11\x1F\x88\x89\x00\x0E\xDC\xCC\x6E\xE6\xDD\xDD\xD9\x99\xBB\xBB\x67\x63\x6E\x0E\xEC\xCC\xDD\xDC\x99\x9F\xBB\xB9\x33\x3E"
+        if rh.logo == nintendo_logo:
+            base_score += 10        #Very unlikely non-Gameboy data will have this data at the right position
+        
+        #1 point each for title, manufacturer code, and new licensee having valid ASCII data
+        if type(rh.title) == str:
+            base_score += 1
+        
+        if type(rh.mfxr_code) == str:
+            base_score += 1
+        
+        if type(rh.new_licensee) == str:
+            base_score += 1
+        
+        #Extra points for CGB support
+        if rh.cgb_flag = 0x80:
+            cgb_score += 5          #5 points towards CGB over DMG if supported
+        elif rh.cgb_flag = 0xC0:
+            dmg_score -= 1000000    #Heavily weigh against DMG analysis if ROM indicates CGB required
+            cgb_score += 10         #10 points if required
+        
+        #Mapper detection
+        if rh.cartridge_type in [0x00, 0x08, 0x09]:
+            mapper_scores.append(1, "flat")
+        
+        if rh.cartridge_type in [0x01, 0x02, 0x03]:
+            mapper_scores.append(1, "mbc1")
+        
+        if rh.cartridge_type in [0x05, 0x06]:
+            mapper_scores.append(1, "mbc2")
+        
+        if rh.cartridge_type in [0x0F, 0x10, 0x11, 0x12, 0x13]:
+            mapper_scores.append(1, "mbc3")
+        
+        if rh.cartridge_type in [0x15, 0x16, 0x17]:
+            mapper_scores.append(1, "mbc4")
+        
+        if rh.cartridge_type in [0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E]:
+            mapper_scores.append(1, "mbc5")
+    except:
+        pass
+    
+    results = []
+    
+    gb_base = DMG
+    if (base_score + cgb_score) > (base_score + dmg_score):
+        gb_base = CGB
+        base_score += cgb_score
+    else:
+        base_score += dmg_score
+    
+    mapper_scores.sort()
+    best_mapper = {"flat":FlatMapper,
+                   "mbc1":MBC1Mapper,
+                   "mbc2":MBC2Mapper,
+                   "mbc3":MBC3Mapper,
+                   "mbc4":MBC4Mapper,
+                   "mbc5":MBC5Mapper}[mapper_scores[-1][-1]]
+    base_score += mapper_scores[-1][0]
+    
+    results.append({"class_bases":(gb_base, best_mapper), "score":base_score, "name":"Gameboy ROM Image", "stream":"ROM"})
+    return results
 
 class FlatMapper(BasePlatform):
     ROM = {"segsize":0x8000,
@@ -12,7 +228,7 @@ class FlatMapper(BasePlatform):
     SRAM = {"segsize":0x2000,
            "views":[(0xA000, 0)],
            "maxsegs":1,
-           "type":linker.PermenantArea}
+           "type":linker.SaveArea}
 
     @classmethod
     def banked2flat(self, bank, addr):
@@ -45,7 +261,7 @@ class MBC1Mapper(BasePlatform):
     SRAM = {"segsize":0x2000,
            "views":[(0xA000, None)],
            "maxsegs":4,
-           "type":linker.PermenantArea}
+           "type":linker.SaveArea}
 
     @classmethod
     def banked2flat(self, bank, addr):
@@ -93,7 +309,7 @@ class MBC2Mapper(BasePlatform):
     SRAM = {"segsize":0x200,
            "views":[(0xA000, 0)],
            "maxsegs":1,
-           "type":linker.PermenantArea}
+           "type":linker.SaveArea}
 
     @classmethod
     def banked2flat(self, bank, addr):
@@ -137,7 +353,7 @@ class MBC3Mapper(BasePlatform):
     SRAM = {"segsize":0x2000,
            "views":[(0xA000, None)],
            "maxsegs":4,
-           "type":linker.PermenantArea}
+           "type":linker.SaveArea}
 
     @classmethod
     def banked2flat(self, bank, addr):
@@ -181,7 +397,7 @@ class MBC5Mapper(BasePlatform):
     SRAM = {"segsize":0x2000,
            "views":[(0xA000, None)],
            "maxsegs":0x10,
-           "type":linker.PermenantArea}
+           "type":linker.SaveArea}
     
     @classmethod
     def banked2flat(self, bank, addr):
@@ -221,59 +437,6 @@ class MBC5Mapper(BasePlatform):
             return (addr // 0x2000, (addr % 0x2000) + 0xA000)
         else:
             return super(MBC3Mapper, self).flat2banked(bank, addr)
-
-class BaseSystem(BasePlatform):
-    MEMAREAS = ["ROM", "VRAM", "SRAM", "WRAM", "HRAM", "OAM", "IOSPACE", "INTMASK"]
-    IOSPACE = {"views":[(0xFF00, 0)],
-               "segsize":128,
-               "maxsegs":1,
-               "type":linker.DynamicArea}
-    INTMASK = {"views":[(0xFFFF, 0)],
-               "segsize":1,
-               "maxsegs":1,
-               "type":linker.DynamicArea}
-    HRAM = {"views":[(0xFF80, 0)],
-            "segsize":127,
-            "maxsegs":1,
-            "type":linker.DynamicArea}
-    OAM = {"views":[(0xFE00, 0)],
-           "segsize":0xA0,
-           "maxsegs":1,
-           "type":linker.DynamicArea}
-    ECHO = {"views":[(0xE000, 0)],
-            "segsize":0x1E00,
-            "type":linker.ShadowArea,
-            "shadows":"WRAM"}
-    GROUPMAP = {"CODE": "ROM", "DATA": "ROM", "BSS":"WRAM", "HOME":("ROM", 0), "VRAM":"VRAM", "HRAM":"HRAM"}
-
-    @classmethod
-    def banked2flat(self, bank, addr):
-        if addr > 0xFDFF and addr < 0xFEA0:
-            return (addr - 0xFE00, "OAM")
-        elif addr > 0xFEFF and addr < 0xFF80:
-            return (addr - 0xFF00, "IOSPACE")
-        elif addr > 0xFF7F and addr < 0xFFFF:
-            return (addr - 0xFF80, "HRAM")
-        elif addr > 0xDFFF and addr < 0xFE00:
-            return self.banked2flat(addr - 0x2000)
-        elif addr == 0xFFFF:
-            return (0, "INTMASK")
-        else:
-            return super(BaseSystem, self).banked2flat(bank, addr)
-
-    @classmethod
-    def flat2banked(self, addr, src):
-        """Convert a flat address and memory area name to Gameboy bank number and Z80 address."""
-        if src == "OAM":
-            return (0, addr + 0xFE00)
-        elif src == "IOSPACE":
-            return (0, addr + 0xFF00)
-        elif src == "HRAM":
-            return (0, addr + 0xFF80)
-        elif src == "INTMASK":
-            return (0, addr)
-        else:
-            return super(BaseSystem, self).flat2banked(bank, addr)
 
 class CGB(BaseSystem):
     WRAM = {"segsize":0x1000,

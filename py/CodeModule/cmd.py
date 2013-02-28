@@ -89,6 +89,7 @@ def main(argv = sys.argv):
     #in the future, add some import machinery magic to import everything named "commands"
     import CodeModule.asm.commands
     import CodeModule.fileops.cmp
+    import CodeModule.games.identify
     
     resp = parser.parse_args(argv[1:])
     resp.func(resp)
