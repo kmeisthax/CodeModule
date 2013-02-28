@@ -200,6 +200,61 @@ def String(encoding = "utf-8"):
             return self.core
     return StringInstance
 
+def UnterminatedString(sizeParam, encoding = "utf-8"):
+    #Assumes countType = ByteCount for now, add support for EntriesCount later
+    class UnterminatedStringInstance(CField):
+        def __init__(self, *args, **kwargs):
+            self.__corestr = ""
+            super(StringInstance, self).__init__(*args, **kwargs)
+        
+        def load(self, fileobj):
+            count = sizeParam
+            if type(sizeParam) is not int:
+                count = self.get_dynamic_argument(sizeParam)
+            
+            self.bytes = fileobj.read(count)
+        
+        @property
+        def core(self):
+            return self.__corestr
+
+        @core.setter
+        def core(self, val):
+            self.__corestr = val
+        
+        @property
+        def bytes(self):
+            return self.__corestr.encode(encoding)
+        
+        @bytes.setter
+        def bytes(self, inbytes):
+            if self.bytelength != len(inbytes):
+                self.set_dynamic_argument(sizeParam, len(inbytes))
+                self.__corestr = inbytes.decode(encoding)
+            else:
+                self.__corestr = inbytes.decode(encoding)
+        
+        @property
+        def bytelength(self):
+            count = sizeParam
+            if type(sizeParam) is not int:
+                count = self.get_dynamic_argument(sizeParam)
+            
+            return count
+        
+        def parsebytes(self, obytes):
+            count = sizeParam
+            if type(sizeParam) is not int:
+                count = self.get_dynamic_argument(sizeParam)
+            
+            self.bytes = obytes[:count]
+            return obytes[count:-1]
+        
+        def __str__(self):
+            return self.core
+    
+    return UnterminatedStringInstance
+
 LittleEndian = 0            # 0x12345678 = b'\x78\x56\x34\x12'
 BigEndian = 1               # 0x12345678 = b'\x12\x34\x56\x78'
 NetworkEndian = BigEndian
