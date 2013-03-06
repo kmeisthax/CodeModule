@@ -27,7 +27,7 @@ class commandcls(object):
         global_options(**rkwargs)
         kwargs.update(rkwargs)
         
-        self.__func(*args, **kwargs)
+        return self.__func(*args, **kwargs)
 
 def command(func):
     return commandcls(func)
@@ -91,5 +91,13 @@ def main(argv = sys.argv):
     import CodeModule.fileops.cmp
     import CodeModule.games.identify
     
-    resp = parser.parse_args(argv[1:])
-    resp.func(resp)
+    try:
+        resp = parser.parse_args(argv[1:])
+        rcode = resp.func(resp)
+        
+        if type(rcode) is not int:
+            rcode = 0
+        
+        sys.exit(rcode)
+    except:
+        sys.exit(1)
