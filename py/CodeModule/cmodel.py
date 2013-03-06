@@ -1064,13 +1064,17 @@ class Struct(CField, metaclass=_Struct):
     
     @core.setter
     def core(self, items):
-        """Setter method for structs that accepts any iterable with as many items as the struct has fields."""
-        if len(self.__order) != len(items):
-            #we need as many items as there are fields
-            raise CorruptedData
-        
-        for item, field in zip(items, self.__order):
-            self.__storage[field].core = item
+        """Setter method for structs that accepts dictionaries or tuples."""
+        if type(items) is dict:
+            for key, value in items.items():
+                self.__storage[key].core = value
+        else:
+            if len(self.__order) != len(items):
+                #we need as many items as there are fields
+                raise CorruptedData
+            
+            for item, field in zip(items, self.__order):
+                self.__storage[field].core = item
 
 ExternalTag = 0
 InternalTag = 1
