@@ -90,6 +90,7 @@ def main(argv = sys.argv):
     import CodeModule.asm.commands
     import CodeModule.fileops.cmp
     import CodeModule.games.identify
+    import CodeModule.games.extract
     
     try:
         resp = parser.parse_args(argv[1:])

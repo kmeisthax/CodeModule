@@ -1,5 +1,6 @@
 from CodeModule.cmd import command, logged, argument, group
 from CodeModule.systems import gb
+from CodeModule.exc import InvalidFileCombination
 
 IDENTIFY_LIST = [gb.identify_file]
 
@@ -37,3 +38,42 @@ def identify_stream(fileobj, filename = None):
         best_result = result
     
     return best_result
+
+def construct_result_object(result):
+    klass = None
+    if "class_bases" in result.keys():
+        name = ""
+        for classbase in result["class_bases"]:
+            name += classbase.__name__
+        
+        klass = type(name, result["class_bases"], {})
+    elif "class" in result.keys():
+        klass = result["class"]
+    
+    return klass()
+
+def instantiate_resource_streams(files):
+    """Given a set of files, construct an object for them which can read and write resource data."""
+    file_results = {}
+    file_streams = {}
+    
+    for filename in files:
+        file_streams[filename] = open(filename, "rb")
+        file_results[filename] = identify_stream(file_streams[filename], filename)
+        
+        if file_results[filename] == None:
+            print("File " + filename + " could not be identified")
+    
+    result = None
+    for filename, fresult in file_results.items():
+        if result == None:
+            result = fresult
+        elif result != fresult:
+            raise InvalidFileCombination
+    
+    robject = construct_result_object(result)
+    
+    for filename, fresult in file_results.items():
+        robject.install_stream(file_streams[filename], fresult["stream"])
+    
+    return robject

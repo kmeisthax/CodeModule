@@ -3,7 +3,7 @@ from CodeModule.asm import linker
 from CodeModule.systems.helper import BasePlatform
 from CodeModule import cmodel
 
-import math, os, struct
+import math, os, struct, json
 
 class BaseSystem(BasePlatform):
     """Base class implementation of a Gameboy.
@@ -102,20 +102,34 @@ class BaseSystem(BasePlatform):
     
     def resource_information(self, resource_type):
         if resource_type == "rom_header":
-            return {"class":RomHeader}
+            return {"storage_pattern":"singleton",
+                    "singleton_name":"header",
+                    "extracted_as":dict,
+                    "inject_accepts":["text/json", dict, RomHeader]}
     
-    def extract_resource(self, resource_type, resource_id):
+    def extract_resource(self, resource_type, resource_id = None):
         if resource_type == "rom_header":
             self.streams["ROM"].seek(0x104)
-            RomHeader.load(self.streams["ROM"])
-            return RomHeader(self)
+            rh = RomHeader()
+            rh.load(self.streams["ROM"])
+            result = rh.core._asdict()
+            result["logo"] = list(result["logo"])
+            
+            return result
     
-    def inject_resource(self, resource_type, resource_id, resource):
+    def inject_resource(self, resource_type, resource_id = None, resource = None):
         if resource_type == "rom_header":
             ires = resource
-            if type(resource) is not RomHeader:
+            if type(ires) is bytes:
+                ires = str(ires, "utf-8")
+            
+            if type(ires) is str:
+                ires = json.loads(ires)
+                ires["logo"] = bytes(ires["logo"])
+            
+            if type(ires) is not RomHeader:
                 ires = RomHeader()
-                ires.core = resource
+                ires.core = jres
             
             self.streams["ROM"].seek(0x104)
             ires.save(self.streams["ROM"])
