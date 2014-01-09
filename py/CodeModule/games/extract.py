@@ -41,7 +41,7 @@ def extract(logger, srcfiles, restype, **kwargs):
             fileobj = open(filepath, "wt", encoding="utf-8")
             json.dump(data, fileobj)
         elif type(data) is bytes: #otherwise the returned data type is text or binary data
-            fileobj = open(filepath, "wb", encoding="utf-8")
+            fileobj = open(filepath, "wb")
             fileobj.write(data)
         elif type(data) is str:
             fileobj = open(filepath, "wt", encoding="utf-8")
