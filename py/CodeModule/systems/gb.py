@@ -1,6 +1,7 @@
 from CodeModule.exc import *
 from CodeModule.asm import linker
 from CodeModule.systems.helper import BasePlatform
+from CodeModule.games.identify import identifier
 from CodeModule import cmodel
 
 import math, os, struct, json
@@ -152,11 +153,12 @@ class RomHeader(cmodel.Struct):
     
     __order__ = ["logo", "title", "mfxr_code", "cgb_flag", "new_licensee", "sgb_flag", "cartridge_type", "rom_size", "ram_size", "destination_code", "old_licensee", "rom_version", "header_checksum", "rom_checksum"]
 
+@identifier
 def identify_file(fileobj, filename = None):
     """Attempt to identify Game Boy cartridge ROMs."""
 
     results = []
-    base_score = 0      #Score for being a Gameboy ROM
+    base_score = -5     #Score for being a Gameboy ROM
     dmg_score  = 0      #Score for being intended for Gameboy Color
     cgb_score  = 0      #Score for being intended for Gameboy Color
     mapper_scores = []  #Score for having various mappers attached
@@ -172,7 +174,7 @@ def identify_file(fileobj, filename = None):
         
         base_score += 1 #1 point for RomHeader loading properly
     except:
-        raise
+        return []
     else:
         #Check validity of Nintendo logo
         nintendo_logo = b"\xCE\xED\x66\x66\xCC\x0D\x00\x0B\x03\x73\x00\x83\x00\x0C\x00\x0D\x00\x08\x11\x1F\x88\x89\x00\x0E\xDC\xCC\x6E\xE6\xDD\xDD\xD9\x99\xBB\xBB\x67\x63\x6E\x0E\xEC\xCC\xDD\xDC\x99\x9F\xBB\xB9\x33\x3E"
