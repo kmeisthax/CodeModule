@@ -2,7 +2,7 @@ from CodeModule.cmd import command, logged, argument, group
 from CodeModule.systems import gb
 from CodeModule.exc import InvalidFileCombination
 
-IDENTIFY_LIST = [gb.identify_file]
+IDENTIFY_LIST = []
 
 @argument("files", nargs = "+", type=str, metavar='foo.rom', help="List of files to identify")
 @command
@@ -22,6 +22,11 @@ def identify(logger, files, **kwargs):
             print("File " + filename + " could not be identified")
         else:
             print("File " + filename + " is " + result["name"] + " with score " + str(result["score"]))
+
+def identifier(func):
+    """Wrapper which adds a callable to the list of file identifiers."""
+    IDENTIFY_LIST.append(func)
+    return func
 
 def identify_stream(fileobj, filename = None):
     """Given a file object and optional name, identify what the file is."""
