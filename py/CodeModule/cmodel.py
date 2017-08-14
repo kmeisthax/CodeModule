@@ -352,9 +352,6 @@ def Int(size, endianness = BigEndian, signedness = Unsigned):
         @property
         def bytes(self):
             data = b''
-            stride = endianness
-            if endianness is LittleEndian:
-                stride = -1
             
             formattedint = self.__coreint
             if self.__lengthlock is not None:
@@ -374,9 +371,13 @@ def Int(size, endianness = BigEndian, signedness = Unsigned):
                 elif signedness is SignedMagnitude:
                     formattedint = formattedint + highbit
             
-            for i in range(bytecount, 0, stride):
-                data += bytes(chr(formattedint >> i*8 & 0xFF), "raw_unicode_escape")
-            
+            if endianness == LittleEndian:
+                for i in range(0, bytecount):
+                    data += bytes(chr(formattedint >> i * 8 & 0xFF), "raw_unicode_escape")
+            else:
+                for i in range(bytecount, 0, -1):
+                    data += bytes(chr(formattedint >> (i - 1) * 8 & 0xFF), "raw_unicode_escape")
+
             return data
         
         @bytes.setter
@@ -500,7 +501,7 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
                 curpos = fileobj.tell()
                 fileobj.seek(scount, whence=SEEK_END)
                 endpos = fileobj.tell()
-                fileobj.seek(curpos, whence=SEEK_SET)   
+                fileobj.seek(curpos, whence=SEEK_SET)
                 lastpos = fileobj.tell()
 
                 while curpos < endpos:
@@ -865,7 +866,7 @@ def Enum(storageType, *valueslist, **kwargs):
     try:
         iotaUpdate = kwargs["iotaUpdate"]
     except:
-        #By default, increment 
+        #By default, increment
         iotaUpdate = lambda x: x+1
     
     for value in valueslist:
@@ -894,7 +895,7 @@ def Enum(storageType, *valueslist, **kwargs):
             if val not in valuesDict.values():
                 raise CorruptedData
             
-            super(EnumInstance, self).core = val
+            storageType.core.fset(self, val)
         
         @property
         def bytes(self):
@@ -999,19 +1000,23 @@ class Struct(CField, metaclass=_Struct):
         else:
             return super(Struct, self).__getattribute__(name)
 
-    def __setattribute__(self, name, val):
+    def __setattr__(self, name, val):
         if name == "_Struct__order":
             raise CorruptedData #we really shouldn't alter the struct order so brazenly
         elif name in self.__order:
             #Since it is possible for a user program to get access to a field
             #object, we should copy core-to-core for fields and direct-to-core
             #for other Python objects.
-            if "PRIMITIVE" in val.__dict__.keys():
-                self.__storage[name].core = val.core
-            else:
+            try:
+                if "PRIMITIVE" in val.__dict__.keys():
+                    self.__storage[name].core = val.core
+                else:
+                    self.__storage[name].core = val
+            except AttributeError:
+                #Not a class, just do the direct storage method
                 self.__storage[name].core = val
         else:
-            super(Struct, self).__setattribute__(name, val)
+            super(Struct, self).__setattr__(name, val)
     
     def _CField__getfield(self, name):
         """Internal function that allows CField to access fields irregardless of PRIMITIVE.
@@ -1021,7 +1026,7 @@ class Struct(CField, metaclass=_Struct):
         intended for CField and CField only."""
         return self.__storage[name]
     
-    def __delattribute__(self, name):
+    def __delattr__(self, name):
         #Uh yeah, you aren't deleting stuff from structs. That would change the
         #schema, and binary formats are parsed with a fixed schema.
         raise CorruptedData
@@ -1038,7 +1043,7 @@ class Struct(CField, metaclass=_Struct):
     def bytes(self):
         lisbytes = []
         for field in self.__order:
-            lisbytes.append(field.bytes)
+            lisbytes.append(self.__storage[field].bytes)
         
         return b"".join(lisbytes)
     
@@ -1196,7 +1201,10 @@ class Union(CField, metaclass = _Union):
     @property
     def core(self):
         self.__updatestate()
-        return self.__coretype(self.__tag__, self.__fieldstorage.core)
+        try:
+            return self.__coretype(self.__tag__, self.__fieldstorage.core)
+        except AttributeError:
+            return self.__coretype(self.__tag__, None)
     
     @core.setter
     def core(self, val):
@@ -1262,24 +1270,28 @@ class Union(CField, metaclass = _Union):
             #User variable or class/user function
             return super(Union, self).__getattribute__(name)
 
-    def __setattribute__(self, name, val):
+    def __setattr__(self, name, val):
         if name.startswith("_Union"):
             #psuedoprivates are specialcased to avoid recursion
-            super(Union, self).__setattribute__(name, val)
+            super(Union, self).__setattr__(name, val)
         elif name == "__tag__":
             #setting __tag__ forces the field to change
             self.__tagstorage.core = val
             self.__updatestate()
         elif name == "__contents__":
             self.__updatestate()
-            
-            if "PRIMITIVE" in val.__dict__.keys():
-                self.__fieldstorage.core = val.core
-            else:
-                self.__fieldstorage.core = val
+
+            try:
+                if "PRIMITIVE" in val.__dict__.keys():
+                    self.__fieldstorage.core = val.core
+                else:
+                    self.__fieldstorage.core = val
+            except AttributeError:
+                #Not a class, just do the direct storage method
+                self.__storage[name].core = val
         elif name in self.__mapping.keys():
             if name not in self.__reverseValues[self.__tag__]:
                 self.__tag__ = self.__mapping[name]
             self.__contents__ = val
         else:
-            super(Union, self).__setattribute__(name, val)
+            super(Union, self).__setattr__(name, val)
