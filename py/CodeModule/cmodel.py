@@ -466,6 +466,13 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
             super(ArrayInstance, self).__init__(*args, **kwargs)
             self.__uniqid = 0
             
+            if countType is BytesCount:
+                if type(sizeParam) is str:
+                    self.find_argument_field(sizeParam).tie_to_length(self, "bytes")
+            elif countType is EntriesCount:
+                if type(sizeParam) is str:
+                    self.find_argument_field(sizeParam).tie_to_length(self)
+
         def load(self, fileobj):
             scount = sizeParam
             if type(sizeParam) is not int:
@@ -525,14 +532,17 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
         #don't escape their parent structures, just the data.
         def __getitem__(self, key):
             #Uncoerce field into core data. Does not support slicing yet.
-            return super(ArrayInstance, self).__getitem__(key).core
+            if super(ArrayInstance, self).__getitem__(key).PRIMITIVE != False:
+                return super(ArrayInstance, self).__getitem__(key).core
+            else:
+                #If this is an array of structs, do not core them.
+                return super(ArrayInstance, self).__getitem__(key)
 
         def __setitem__(self, key, value):
             super(ArrayInstance, self).__getitem__(key).core = value
         
         def __delitem__(self, key):
             super(ArrayInstance, self).__delitem__(key)
-            self.alter_dynamic_argument(sizeParam, lambda x: len(self))
         
         def append(self, item):
             if type(item) != containedType:
@@ -547,7 +557,6 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
             super(ArrayInstance, self).append(item)
             
             item.reparent(itemname, container = self)
-            self.alter_dynamic_argument(sizeParam, lambda x: len(self))
         
         def extend(self, otherlist):
             for item in otherList:
@@ -572,6 +581,10 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
                 childbytes.append(thing.bytes)
             return b"".join(childbytes)
         
+        @property
+        def bytelength(self):
+            return len(self.bytes)
+
         def parsebytes(self, obytes):
             scount = sizeParam
             if type(sizeParam) is not int:
@@ -647,11 +660,7 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
             
             for item in normallist:
                 self.append(item)
-        
-        @property
-        def bytelength(self):
-            raise PEBKAC #this could be supported, but we dont yet
-        
+
         #Since this CField is a subtype of list, it doubles as a native Python
         #object and thus should be exposed to the user
         PRIMITIVE = False
@@ -776,7 +785,7 @@ def If(variableName, condition, basetype = None, *args, **kwargs):
             if condition(ctxtprov(self, variableName)):
                 return super(IfInstance, self).bytes
             else:
-                return None
+                return b""
 
         @bytes.setter
         def bytes(self, val):
@@ -1141,6 +1150,16 @@ class _Union(_CFieldDecl):
                 reverseValues[value].append(vname)
             except KeyError:
                 reverseValues[value] = [vname]
+
+            #We also need to import any Enum values into ourself
+            try:
+                exVals = cfields[vname].EXPORTEDVALUES
+                cdict.update(exVals)
+            except:
+                pass
+
+        #Import the exported values from any Enums in our Union.
+        cdict.update(values)
         
         cdict["_Union__mapping"] = mapping
         cdict["_Union__reverseValues"] = reverseValues
@@ -1288,10 +1307,11 @@ class Union(CField, metaclass = _Union):
                     self.__fieldstorage.core = val
             except AttributeError:
                 #Not a class, just do the direct storage method
-                self.__storage[name].core = val
-        elif name in self.__mapping.keys():
-            if name not in self.__reverseValues[self.__tag__]:
-                self.__tag__ = self.__mapping[name]
+                self.__fieldstorage.core = val
+        elif name in self.__tagstorage.EXPORTEDVALUES.keys():
+            tagvalue = self.__tagstorage.EXPORTEDVALUES[name]
+            if self.__tag__ != tagvalue:
+                self.__tag__ = tagvalue
             self.__contents__ = val
         else:
             super(Union, self).__setattr__(name, val)
