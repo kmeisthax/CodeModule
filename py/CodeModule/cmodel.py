@@ -472,7 +472,7 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
             elif countType is EntriesCount:
                 if type(sizeParam) is str:
                     self.find_argument_field(sizeParam).tie_to_length(self)
-
+            
         def load(self, fileobj):
             scount = sizeParam
             if type(sizeParam) is not int:
@@ -584,7 +584,7 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
         @property
         def bytelength(self):
             return len(self.bytes)
-
+        
         def parsebytes(self, obytes):
             scount = sizeParam
             if type(sizeParam) is not int:
@@ -660,7 +660,7 @@ def Array(containedType, sizeParam, countType = EntriesCount, *args, **kwargs):
             
             for item in normallist:
                 self.append(item)
-
+        
         #Since this CField is a subtype of list, it doubles as a native Python
         #object and thus should be exposed to the user
         PRIMITIVE = False
@@ -885,8 +885,8 @@ def Enum(storageType, *valueslist, **kwargs):
             iota = iotaUpdate(iota)
         else:
             #insert pre-specified enum values
-            iota = value[1]
-            valuesDict[value[0]] = iota
+            valuesDict[value[0]] = value[1]
+            iota = iotaUpdate(value[1])
     
     class EnumInstance(storageType):
         """Enum class that wraps a storageType.
@@ -1150,14 +1150,14 @@ class _Union(_CFieldDecl):
                 reverseValues[value].append(vname)
             except KeyError:
                 reverseValues[value] = [vname]
-
+            
             #We also need to import any Enum values into ourself
             try:
                 exVals = cfields[vname].EXPORTEDVALUES
                 cdict.update(exVals)
             except:
                 pass
-
+        
         #Import the exported values from any Enums in our Union.
         cdict.update(values)
         
